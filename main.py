@@ -530,7 +530,7 @@ importlib.reload(model)
 importlib.reload(config) #for DEV_START_DATE
 
 
-lstm_m = model.ModelLSTM(df)
+m_lstm = model.ModelLSTM(df)
 
 
 #TODO: finish grid search
@@ -539,26 +539,26 @@ lstm_m = model.ModelLSTM(df)
 # That way, would be easy to assign number to saved csv file.
 
 #TODO: this would set the options/borders/steps for grid searching
-exog_cols = ["use_discarded", "use_expired"]# TODO:put back in: , 'ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC', "workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year", "tlmin", "tlmax"]
+exog_cols = ["use_discarded", "use_expired", 'ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC', "workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year", "tlmin", "tlmax"]
 
 
 
 #Simple run (for testing, beofre implementing grid search)
-lstm_m.set_validation_rolling_window(
+m_lstm.set_validation_rolling_window(
     #TODO: store validation_sets as df: index + columns train start/train end/test start/test end
     #TODO: add option to choose days for train and test period.
-    train_percent=0.95,#9,#985,#975,
+    train_percent=0.8,#9,#985,#975,
     test_len=14, 
-    start_date="2022-01-01"
+    start_date="2021-01-01"
 )
 
 #%%
-lstm_m.set_model_parameters(
-    inner_window = 365*2, #365*2 #365 to capture at least 1 year, #for training length
+m_lstm.set_model_parameters(
+    inner_window = 365*2, #365,#200,#365, #365*2 #365 to capture at least 1 year, #for training length
 
     memory_cells=64,#64
     epochs=20,#20
-    batch_size=64, #32
+    batch_size=32, #32
     dropout=0.5,
     pi_iterations=100, #100 #how often to run, to calculate prediction intervals
     optimizer="adam",
@@ -567,15 +567,15 @@ lstm_m.set_model_parameters(
     lower_limit=2.5,
     upper_limit=97.5
 )
-lstm_m.set_exogenous_cols(exog_cols = exog_cols)
-lstm_m.set_prediction_column(prediction_column="use_transfused")
+m_lstm.set_exogenous_cols(exog_cols = exog_cols)
+m_lstm.set_prediction_column(prediction_column="use_transfused")
 
-lstm_m.print_params()
+m_lstm.print_params()
 
-lstm_params = lstm_m.get_params_df()
+m_lstm = m_lstm.get_params_df()
 #%%
 #Run model
-lstm_m.model_run()
+m_lstm.model_run()
 
 #%%
 #Get error values + plotting
@@ -666,6 +666,54 @@ for grid in search_grid[0:10]:
 # MARK: PROPHET
 #----------------------------------------------------------------------------------
 
+
+importlib.reload(model)
+importlib.reload(config) #for DEV_START_DATE
+
+
+m_prophet = model.ModelProphet(df)
+
+#TODO: this would set the options/borders/steps for grid searching
+exog_cols = ["use_discarded", "use_expired", 'ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC', "workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year", "tlmin", "tlmax"]
+
+
+
+#Simple run (for testing, beofre implementing grid search)
+m_prophet.set_validation_rolling_window(
+    #TODO: store validation_sets as df: index + columns train start/train end/test start/test end
+    #TODO: add option to choose days for train and test period.
+    train_percent=0.8,#9,#985,#975,
+    test_len=14, 
+    start_date="2021-01-01"
+)
+
+#%%
+lstm_m.set_model_parameters(
+    inner_window = 365*2, #365,#200,#365, #365*2 #365 to capture at least 1 year, #for training length
+
+    memory_cells=64,#64
+    epochs=20,#20
+    batch_size=32, #32
+    dropout=0.5,
+    pi_iterations=100, #100 #how often to run, to calculate prediction intervals
+    optimizer="adam",
+    loss="mae",
+    activation_fct="relu",
+    lower_limit=2.5,
+    upper_limit=97.5
+)
+lstm_m.set_exogenous_cols(exog_cols = exog_cols)
+lstm_m.set_prediction_column(prediction_column="use_transfused")
+
+lstm_m.print_params()
+
+lstm_params = lstm_m.get_params_df()
+#%%
+#Run model
+lstm_m.model_run()
+
+
+
 from prophet import Prophet
 
 start_date = pd.to_datetime("2020-01-01")
@@ -673,9 +721,12 @@ split_date = pd.to_datetime("2023-12-31")
 end_date = pd.to_datetime("2024-12-31")
 
 pred_col = config.COLUMN
-regressor_cols = ['EC_BG_0', 'EC_BG_A', 'EC_BG_AB', 'EC_BG_B', 'EC_RH_Rh_negative',
-       'EC_RH_Rh_positive', 'EC_TYPE_EKF', 'EC_TYPE_EKFX', 'EC_TYPE_Other',
-       'PAT_BG_0', 'use_discarded', 'use_expired', 'use_transfused']
+regressor_cols = ['use_discarded', 'use_expired',   
+        'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC', 'count',
+        'is_workday', 'workday_enc', 'holiday', 'holiday_enc', 'day_of_week',
+        'day_of_year', 'year']
+    #    'EC_RH_Rh_positive', 'EC_TYPE_EKF', 'EC_TYPE_EKFX', 'EC_TYPE_Other',
+    #    'PAT_BG_0', 'use_discarded', 'use_expired', 'use_transfused']
 sel_cols = [pred_col] + regressor_cols
 
 
@@ -717,8 +768,30 @@ fc.head()
 
 # m.add_regressor()
 
+#%%
+fc_subset = fc.set_index("ds")
+fc_subset.index = pd.to_datetime(fc_subset.index)
+fc_plotting = fc_subset["2020-01-01":"2020-05-31"]
+fc_plotting = fc_plotting.join(
+    df["use_transfused"]
+)
+# plt.plot(fc_plotting.index, fc_plotting["yhat_lower"])
+# plt.plot(fc_plotting.index, fc_plotting["yhat_upper"])
+plt.plot(fc_plotting.index, fc_plotting["yhat"])
+plt.plot(fc_plotting.index, fc_plotting["use_transfused"])
 
 
+#%%
+import sklearn.metrics as metrics #error metrics (mae, mape etc)
+
+prophet_fc = fc_plotting
+# check accuracy
+print("prophet")
+print("RMSE:", metrics.root_mean_squared_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
+print("MAPE:", metrics.mean_absolute_percentage_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
+print("MAE: ", metrics.mean_absolute_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
+print("MdAE:", metrics.median_absolute_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
+print("MaxE:", metrics.max_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
 
 
 

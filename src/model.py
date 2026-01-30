@@ -9,6 +9,9 @@ from matplotlib import pyplot as plt
 from matplotlib.pyplot import cm #color palette
 import gc
 
+import os
+import psutil
+
 from sklearn.model_selection import train_test_split
 import statsmodels
 from statsmodels.tsa.arima.model import ARIMA
@@ -1278,6 +1281,7 @@ class ModelLSTM(Model):
             ValueError: If a column from exog_cols is not present in 'df'
             ValueError: If a list item is not a string.
         """
+        #TODO: probably better as model class!
 
         #Check df/exog_cols input for validity
         if len(exog_cols) == 0:
@@ -1299,6 +1303,7 @@ class ModelLSTM(Model):
 
 
     def print_params(self):
+        #TODO: probably better as model class!
         for key, value in self.params.items():
             print(key, ": ", value)
         
@@ -1307,6 +1312,8 @@ class ModelLSTM(Model):
         """
         Returns params as df
         """
+        #TODO: probably better as model class!
+
         params_df = pd.DataFrame([self.params]) #bracket to keep everything in one row
 
         return params_df
@@ -1328,8 +1335,23 @@ class ModelLSTM(Model):
         #TODO: Write docstring
         all_windows_start = time.time()
         self.stats["windows_num"] = len(self.validation_sets)
+        
+        #initialize model for first time (needs X_train for shape, so need to run other fcts once)
+        self.get_start_end_days(self.validation_sets[0])
+        self.get_data()
+        self.scale_data()
+        self.get_training_test_set()
+        self.build_model()
+
         for i, window in enumerate(self.validation_sets):
-            print(f"Window {i}/{len(self.validation_sets)}")
+            print(f"\n\nWindow {i}/{len(self.validation_sets)}")
+            
+            print("Loading weights from: ", self.dir_name, " ", self.file_path)
+            self.model.load_weights(self.file_path+"/initial.weights.h5")
+            
+            process = psutil.Process(os.getpid())
+            print(f"Memory: {process.memory_info().rss/1024**2:.2f} MB")
+            print(f"GC Objects: {len(gc.get_objects())}")
 
             window_start = time.time()
             
@@ -1339,13 +1361,37 @@ class ModelLSTM(Model):
             self.get_data() #get X_raw, y_raw data for every iteration in the sliding7expanding window (correct columns)
             self.scale_data()  #set scaler + transform to scaled data
             self.get_training_test_set()
-            self.build_model()
+            # self.build_model()
             self.fit_model() #train model 
             self.get_prediction_intervalls() #iterations for prediction intervall
             self.add_to_results()
             
             window_end = time.time()
             
+            # #TODO: testing for memory leak only:
+            # current_objs = gc.get_objects()
+            # current_ids = set(id(o) for o in current_objs)
+            # print("Len current ids: ", len(current_ids))
+            # if hasattr(self, 'previous_objs') and len(self.previous_objs) > 0:
+            #     # Find new objects that weren't there last iteration
+            #     new_ids = current_ids - self.previous_objs
+            #     print(f"\n--- {len(new_ids)} New Objects Created this Window ---")
+                
+            #     # inspect the first few
+            #     count = 0
+            #     for o in current_objs:
+            #         if id(o) in new_ids:
+            #             if "tensorflow" in str(type(o)).lower() or "keras" in str(type(o)).lower():
+            #                 print(f"Type: {type(o)}, Val: {str(o)[:50]}...")
+                            
+            #                 # print(f"Type: {type(o)}, Val: {str(o)[:50]}...")
+            #                 count += 1
+            #                 if count >= 15: break # Don't spam
+                            
+            # self.previous_objs = current_ids
+            # print("Len previous_objs: ", len(self.previous_objs))
+
+
             print(f"Window {i} executed in {window_end - window_start}s\n")
 
         all_windows_end = time.time()
@@ -1495,7 +1541,7 @@ class ModelLSTM(Model):
 
         inputs = Input(shape=(self.X_train.shape[1], self.X_train.shape[2])) #TODO: was 1, 2
         # inputs = Input(shape=(self.X_train_scaled.shape[1], self.X_train_scaled.shape[2])) #TODO: was 1, 2
-        x = layers.LSTM(self.params["memory_cells"], return_sequences=True, unroll=True)(inputs)
+        x = layers.LSTM(self.params["memory_cells"], return_sequences=True, unroll=False)(inputs) #TODO: unroll=True (was before, testing if fixes memory leak)
         x = layers.LSTM(self.params["memory_cells"], return_sequences=False)(x)
         x = layers.Dense(2*self.params["memory_cells"], activation=self.params["activation_fct"])(x)
         #MC dropout
@@ -1512,6 +1558,26 @@ class ModelLSTM(Model):
             metrics=[keras.metrics.RootMeanSquaredError()]
             #jit_compile=True
         )
+
+        #Save model weights (first create dir, then save):
+        #TODO: evaluate if this helps with memory leak, otherwise delete:
+        # -> only build model once before window-loop, save weights on compile, then load 
+        # again every iteration:
+        #date+hh:mm+grid(id if doing grid search)
+        self.date = datetime.now().strftime("%Y%m%d_%H%M")
+        if self.id == None:
+            self.dir_name = f"{self.date}-lstm"
+        elif self.id != None:
+            self.dir_name = f"{self.date}-{self.id}-lstm"
+
+
+        #make directory with name (see above)
+        print(f"Creating directory {self.dir_name}")
+        print(f"Saving params to {self.dir_name}")
+        self.file_path = "./results/"+self.dir_name
+        Path(self.file_path).mkdir(parents=True, exist_ok=True)
+
+        self.model.save_weights(self.file_path+"/initial.weights.h5")
 
     
     @timer_func
@@ -1562,8 +1628,10 @@ class ModelLSTM(Model):
         x_tiled = np.tile(self.X_test, (n_iter, 1, 1))
         
         # Get all predictions in one batch
-        preds = self.model.predict(x_tiled, batch_size=self.params["batch_size"], verbose=0)
-        
+        # preds = self.model.predict(x_tiled, batch_size=self.params["batch_size"], verbose=0)
+        #Change to keep training set to true, which keeps the dropout layer necessary for MC (pred intervalls)
+        preds = self.model(x_tiled, training=True, verbose=0).numpy()
+
         # Reshape back to (iterations, samples, forecast_days)
         preds = preds.reshape(n_iter, self.X_test.shape[0], self.forecast_days)
         
@@ -1621,13 +1689,16 @@ class ModelLSTM(Model):
         #resets all self values used in model_run
         if hasattr(self, 'model') and self.model is not None:
                 # This helps break internal references
-                del self.model
-
+                #del self.model #TODO: deleted to test, if building model once helps with memory leak
+                pass
 
         #resets all states generated by tensorflow-keras
-        keras.backend.clear_session()
+        #keras.backend.clear_session()
 
         gc.collect()
+        gc.collect()
+        # tf.compat.v1.reset_default_graph() # TF graph isn't same as Keras graph
+
 
         self.train_start = None
         self.train_end = None
@@ -1648,7 +1719,7 @@ class ModelLSTM(Model):
         self.X_test_scaled = None
         self.y_test_scaled = None   
 
-        self.model = None
+        # self.model = None
 
         self.forecast_mean = None
         self.forecast_lower = None
@@ -1661,36 +1732,37 @@ class ModelLSTM(Model):
     def save_results(self):
         #Creates new directory where it saves self.params as a json and every dataframe for the results
 
+        # -> Moved filepath creation to build_model (to save weights) and store in self.file_path
         #date+hh:mm+grid(id if doing grid search)
-        date = datetime.now().strftime("%Y%m%d_%H%M")
-        if self.id == None:
-            dir_name = f"{date}-lstm"
-        elif self.id != None:
-            dir_name = f"{date}-{self.id}-lstm"
+        # date = datetime.now().strftime("%Y%m%d_%H%M")
+        # if self.id == None:
+        #     dir_name = f"{date}-lstm"
+        # elif self.id != None:
+        #     dir_name = f"{date}-{self.id}-lstm"
 
 
-        #make directory with name (see above)
-        print(f"Creating directory {dir_name}")
-        print(f"Saving params to {dir_name}")
-        file_path = "./results/"+dir_name
-        Path(file_path).mkdir(parents=True, exist_ok=True)
+        # #make directory with name (see above)
+        # print(f"Creating directory {dir_name}")
+        # print(f"Saving params to {dir_name}")
+        # file_path = "./results/"+dir_name
+        # Path(file_path).mkdir(parents=True, exist_ok=True)
 
         #make params json
-        with open("./results/"+dir_name+"/params.json", "w") as f:
+        with open("./results/"+self.dir_name+"/params.json", "w") as f:
             json.dump(self.params, f)
 
         #Save self.predictions (each df individually)
-        print(f"Saving forecasts to {dir_name}")
+        print(f"Saving forecasts to {self.dir_name}")
         for fc_day, df in self.predictions.items():
             print("KEy: ", fc_day)
             print("Value: ", df)
-            df.to_csv(path_or_buf=file_path+"/"+fc_day+".csv" ,sep=";")
+            df.to_csv(path_or_buf=self.file_path+"/"+fc_day+".csv" ,sep=";")
 
         #Save Error Values df
-        with open("./results/"+dir_name+"/forecast_errors.csv", "w") as f:
+        with open("./results/"+self.dir_name+"/forecast_errors.csv", "w") as f:
             self.forecast_errors
 
-        print(f"Finished saving file to {dir_name}")
+        print(f"Finished saving file to {self.dir_name}")
 
 
     @timer_func
@@ -1764,6 +1836,42 @@ class ModelProphet(Model):
             self.get_prediction_intervalls() #iterations for prediction intervall
             self.add_to_results()
             
+
+    def set_exogenous_cols(exog_cols: list):
+        #TODO: probably better as model class! (see lstm set_exogenous_cols())
+
+        #copied from ModelLSTM:
+        #Check df/exog_cols input for validity
+        if len(exog_cols) == 0:
+            raise ValueError("Need to pass col name present in 'df' to exog_cols")
+        else:
+            for col in exog_cols:
+                if col not in self.data.columns:
+                    raise ValueError(f"{col} not present df's columns: {self.data.columns}")
+                elif type(col) != str:
+                    raise ValueError(f"{col} not a string -- only string colnames allowed")
+                
+        self.params["exog_cols"] = exog_cols
+
+
+
+    def print_params(self):
+        #TODO: probably better as model class!
+        for key, value in self.params.items():
+            print(key, ": ", value)
+        
+
+    def get_params_df(self):
+        #TODO: probably better as model class!
+        """
+        Returns params as df
+        """
+        params_df = pd.DataFrame([self.params]) #bracket to keep everything in one row
+
+        return params_df
+
+    def build_model(self):
+
 
 
     def reset_states(self):

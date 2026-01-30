@@ -199,3 +199,12 @@ very good series:https://www.youtube.com/watch?v=Mdp5pAKNNW4
 + episdoe 164, 165, 166, 166b, 181. insbes. 164, 166
 also 3blue1brown, for overview of calculus (optional), overview of linear algebra (optional) and Neural networks 
 also this: https://www.youtube.com/watch?v=WCUNPb-5EYI
+
+
+
+------
+Add section regarding computational stuff (UMsetzung) of the pipeline, like managing memory leaks etc.
+Speeding operations (vectorized vs loops).
+
+------
+Add section about tensorflow, difference eager<>graph mode. how to speed up etc.
