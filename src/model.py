@@ -446,6 +446,49 @@ class Model:
             df["Difference"] = df["Actual"] - df["Mean"] 
 
 
+    @timer_func
+    def add_to_results(self):        
+        #Add to existing self.predictions dictionary. self.predictions contains n keys of name "Day_"n_i where n=len(fc_days)
+        # with the value of a dataframe with columns Actual, Mean, Lower, Upper and datetime index. 
+        # Each dataframe gets expanded/filled in every window-iteration by the current (of the window) value of the day
+        # and date. So in the first window with 14 fc days, 14 empty dataframes with keys of Day_1 to Day_14 get filled.
+        # Say first day is 01.01., then Day_1 gets one row with actual/mean/lower/upper for 01.01., Day_2 for 02.01. etc.
+        # In the next window, Day_1 gets a new row for day 02.01. and so on.
+
+        #Moved here from ModelLSTM.
+        #TODO: add proper description
+
+        #Initialize self.predictions if not exists.
+        # Creates n (=forecast_days) empty dataframes in a dict, each containing datetime index from day_n in the 
+        # test/validation period.  
+        #TODO: better to implement in __init__ or its own function?
+        if not hasattr(self, "predictions") or self.predictions == None or type(self.predictions) == list:
+            self.predictions = {}
+            for fc_day in range(self.forecast_days):
+                day_label = f"Day_{fc_day + 1}"
+
+                start_date = self.validation_sets[0][2]
+                end_date = self.validation_sets[-1][2] + pd.Timedelta(days=fc_day)
+
+                self.predictions[day_label] = pd.DataFrame(
+                    index=pd.date_range(start_date, end_date),
+                    columns=["Actual", "Mean", "Lower", "Upper"]
+                )
+
+        #fill the dataframes
+        for day in range(self.forecast_days):
+            day_label = f"Day_{day + 1}"
+            forecast_date = self.test_start + pd.Timedelta(days=day)
+
+            day_predictions = self.all_predictions[:, 0, day] #shape of (np_iterations, 1, forecast_days)
+
+            self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.model_params["prediction_column"]]
+            # y_test_original_scale = self.scaler_y.inverse_transform(self.y_test) #old LSTM way: set this line above for-day range
+            # self.predictions[day_label].loc[forecast_date, "Actual"] = y_test_original_scale[0, day]
+            self.predictions[day_label].loc[forecast_date, "Mean"] = np.mean(day_predictions, axis=None) #alternative: axis=0)[0]
+            self.predictions[day_label].loc[forecast_date, "Lower"] = np.percentile(day_predictions, 2.5, axis=None)
+            self.predictions[day_label].loc[forecast_date, "Upper"] = np.percentile(day_predictions, 97.5, axis=None)
+
     
     @timer_func
     def get_stepwise_errors(self):
@@ -1692,49 +1735,6 @@ class ModelLSTM(Model):
 
 
     @timer_func
-    def add_to_results(self):
-        #TODO: move to base class 'Model'? --> difference between LSTM/Prophet: y_test_orgiinal_scale, day_predictions
-        
-        #Add to existing self.predictions dictionary. self.predictions contains n keys of name "Day_"n_i where n=len(fc_days)
-        # with the value of a dataframe with columns Actual, Mean, Lower, Upper and datetime index. 
-        # Each dataframe gets expanded/filled in every window-iteration by the current (of the window) value of the day
-        # and date. So in the first window with 14 fc days, 14 empty dataframes with keys of Day_1 to Day_14 get filled.
-        # Say first day is 01.01., then Day_1 gets one row with actual/mean/lower/upper for 01.01., Day_2 for 02.01. etc.
-        # In the next window, Day_1 gets a new row for day 02.01. and so on.
-
-        #Initialize self.predictions if not exists.
-        # Creates n (=forecast_days) empty dataframes in a dict, each containing datetime index from day_n in the 
-        # test/validation period.  
-        #TODO: better to implement in __init__
-        if not hasattr(self, "predictions") or self.predictions == None or type(self.predictions) == list:
-            self.predictions = {}
-            for fc_day in range(self.forecast_days):
-                day_label = f"Day_{fc_day + 1}"
-
-                start_date = self.validation_sets[0][2]
-                end_date = self.validation_sets[-1][2] + pd.Timedelta(days=fc_day)
-
-                self.predictions[day_label] = pd.DataFrame(
-                    index=pd.date_range(start_date, end_date),
-                    columns=["Actual", "Mean", "Lower", "Upper"]
-                )
-
-
-        #fill the dataframes
-        for day in range(self.forecast_days):
-            day_label = f"Day_{day + 1}"
-            forecast_date = self.test_start + pd.Timedelta(days=day)
-
-            day_predictions = self.all_predictions[:, 0, day] #shape of (np_iterations, 1, forecast_days)
-
-            self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.model_params["prediction_column"]]
-            # y_test_original_scale = self.scaler_y.inverse_transform(self.y_test) #old LSTM way: set this line above for-day range
-            # self.predictions[day_label].loc[forecast_date, "Actual"] = y_test_original_scale[0, day]
-            self.predictions[day_label].loc[forecast_date, "Mean"] = np.mean(day_predictions, axis=None) #alternative: axis=0)[0]
-            self.predictions[day_label].loc[forecast_date, "Lower"] = np.percentile(day_predictions, 2.5, axis=None)
-            self.predictions[day_label].loc[forecast_date, "Upper"] = np.percentile(day_predictions, 97.5, axis=None)
-
-    @timer_func
     def reset_states(self):
         #resets all self values used in model_run
         if hasattr(self, 'model') and self.model is not None:
@@ -1920,42 +1920,6 @@ class ModelProphet(Model):
 
         #predict
         self.forecast = self.model.predict(self.forecast_df)
-
-
-    @timer_func
-    def add_to_results(self):
-        #TODO: move to base class 'Model'? --> difference between LSTM/Prophet: y_test_orgiinal_scale, day_predictions
-
-        #Initialize self.predictions if not exists.
-        # Creates n (=forecast_days) empty dataframes in a dict, each containing datetime index from day_n in the 
-        # test/validation period.  
-        #TODO: better to implement in __init__
-        if not hasattr(self, "predictions") or self.predictions == None or type(self.predictions) == list:
-            self.predictions = {}
-            for fc_day in range(self.forecast_days):
-                day_label = f"Day_{fc_day + 1}"
-
-                start_date = self.validation_sets[0][2]
-                end_date = self.validation_sets[-1][2] + pd.Timedelta(days=fc_day)
-
-                self.predictions[day_label] = pd.DataFrame(
-                    index=pd.date_range(start_date, end_date),
-                    columns=["Actual", "Mean", "Lower", "Upper"]
-                )
-
-        #fill the dataframes
-        for day in range(self.forecast_days):
-            day_label = f"Day_{day + 1}"
-            forecast_date = self.test_start + pd.Timedelta(days=day)
-
-            day_predictions = self.forecast.set_index("ds").loc[forecast_date] #df of all fc + all descriptive columns; from trainstart to testend!
-            
-            self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.model_params["prediction_column"]]
-            self.predictions[day_label].loc[forecast_date, "Mean"] = day_predictions["yhat"]
-            self.predictions[day_label].loc[forecast_date, "Lower"] = day_predictions["yhat_lower"]
-            self.predictions[day_label].loc[forecast_date, "Upper"] = day_predictions["yhat_upper"]
-            #self.predictions[day_label].loc[forecast_date, "Difference"] = self.predictions[day_label].loc[forecast_date, "Actual"] - self.predictions[day_label].loc[forecast_date, "Mean"]
-
 
 
 
