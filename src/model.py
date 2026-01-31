@@ -714,6 +714,7 @@ class ModelComparison(Model):
         self.predictions["mean"] = self.run_mean(col=self.col, model_run=True)
         self.predictions["seasonal_naive"] = self.run_seasonal_naive(col=self.col, model_run=True)
 
+        #TODO: make column with difference of pred type and actual value
 
 
     def run_single_value(self, single_value: int=100, model_run=False):
@@ -1281,7 +1282,7 @@ class ModelLSTM(Model):
             ValueError: If a column from exog_cols is not present in 'df'
             ValueError: If a list item is not a string.
         """
-        #TODO: probably better as model class!
+        #TODO: probably better in Model class!
 
         #Check df/exog_cols input for validity
         if len(exog_cols) == 0:
@@ -1303,7 +1304,7 @@ class ModelLSTM(Model):
 
 
     def print_params(self):
-        #TODO: probably better as model class!
+        #TODO: probably better in Model class!
         for key, value in self.params.items():
             print(key, ": ", value)
         
@@ -1312,7 +1313,7 @@ class ModelLSTM(Model):
         """
         Returns params as df
         """
-        #TODO: probably better as model class!
+        #TODO: probably better in Model class!
 
         params_df = pd.DataFrame([self.params]) #bracket to keep everything in one row
 
@@ -1331,6 +1332,8 @@ class ModelLSTM(Model):
     def model_run(self, print_fit_summary=True, last_only=True): 
         # params here should only be for output to show (df, results, plot etc), no change in model run
         # expanding/rolling window needs to be set already!
+
+        self.create_result_dir()
 
         #TODO: Write docstring
         all_windows_start = time.time()
@@ -1418,6 +1421,8 @@ class ModelLSTM(Model):
 
     @timer_func
     def get_start_end_days(self, window):
+        #TODO: probably better in Model class!
+
         # since lstm works better with running multiple inputs (like a rolling window) and supplying y  so it can adjust
         # weights and biases more often. so we do an inner loop for the forecast window supplied by rolling/expanding window 
         # (=validations_sets).
@@ -1433,6 +1438,7 @@ class ModelLSTM(Model):
 
     @timer_func
     def get_data(self):
+        #TODO: probably better in Model class!
         """
         Using the input "window", which contains tuple of start + end date for both train and test sets, it returns
         numpy arrays for each. VAlues are in format of original data (not scaled!) --> "raw".
@@ -1558,9 +1564,12 @@ class ModelLSTM(Model):
             metrics=[keras.metrics.RootMeanSquaredError()]
             #jit_compile=True
         )
+        self.model.save_weights(self.file_path+"/initial.weights.h5")
 
+    def create_result_dir(self):
+        #TODO: move to base class Model
         #Save model weights (first create dir, then save):
-        #TODO: evaluate if this helps with memory leak, otherwise delete:
+        #TODO: evaluate if this helps with memory leak, otherwise delete: --> creating once and reloading initial weights of model helps/solves mem leak
         # -> only build model once before window-loop, save weights on compile, then load 
         # again every iteration:
         #date+hh:mm+grid(id if doing grid search)
@@ -1577,7 +1586,6 @@ class ModelLSTM(Model):
         self.file_path = "./results/"+self.dir_name
         Path(self.file_path).mkdir(parents=True, exist_ok=True)
 
-        self.model.save_weights(self.file_path+"/initial.weights.h5")
 
     
     @timer_func
@@ -1636,6 +1644,7 @@ class ModelLSTM(Model):
         preds = preds.reshape(n_iter, self.X_test.shape[0], self.forecast_days)
         
         # Inverse transform (optimized to handle the shape)
+        #TODO: rename (like all_predictions_monte_carlo or something?) 
         self.all_predictions = np.array([
             self.scaler_y.inverse_transform(p).astype("float32") for p in preds
         ])
@@ -1754,7 +1763,7 @@ class ModelLSTM(Model):
         #Save self.predictions (each df individually)
         print(f"Saving forecasts to {self.dir_name}")
         for fc_day, df in self.predictions.items():
-            print("KEy: ", fc_day)
+            print("Key: ", fc_day)
             print("Value: ", df)
             df.to_csv(path_or_buf=self.file_path+"/"+fc_day+".csv" ,sep=";")
 
@@ -1766,18 +1775,21 @@ class ModelLSTM(Model):
 
 
     @timer_func
-    def add_stepwise_difference_LSTM(self):
+    def add_stepwise_difference(self):
+        #TODO: move to base class Model
         #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
         # would need changes to structure of result.
         
         #This funcction adds a column with difference between Actual and Mean (=Prediction) to result dfs
         #Put it directly inside add_to_results(), so shouldnt be needed anymore.
         for fc_day, df in self.predictions.items():
-            df["Difference_2"] = df["Actual"] - df["Mean"] 
+            df["Difference"] = df["Actual"] - df["Mean"] 
 
     
     @timer_func
-    def get_stepwise_errors_LSTM(self):
+    def get_stepwise_errors(self):
+        #TODO move to base class Model
+        #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
         #since lstm currently has different architecture of dataframes for results, ill make a new
         #function here. old (comparison, (s)arima) will be adjusted to be same as lstm model.
 
@@ -1815,30 +1827,95 @@ class ModelProphet(Model):
         super().__init__(data)
         #prophet-specific variable inits
         self.model = None
-        self.params = None #rename; prob better in base class.
+        # self.params = None #rename; prob better in base class.
+        self.params = {
+            "prediction_column" : None,
+            "exog_cols" : None,
 
-    def run_model(self):
+            "lower_limit" : None,
+            "upper_limit" : None
+        } #rename; prob better in base class.
+
+
+    def model_run(self):
         #create model with (hyper)parameters
         #params are model parameters
         # days are days to predict
+
+        self.create_result_dir()
+
+        all_windows_start = time.time()
+        self.stats["windows_num"] = len(self.validation_sets)
+
+
         for i, window in enumerate(self.validation_sets):
             print(f"Window {i}/{len(self.validation_sets)}")
             window_start = time.time()
             
-            self.reset_states()
+            # self.reset_states()
 
             self.get_start_end_days(window)
             self.get_data() #get X_raw, y_raw data for every iteration in the sliding7expanding window (correct columns)
-            self.scale_data()  #set scaler + transform to scaled data
-            self.get_training_test_set()
             self.build_model()
             self.fit_model() #train model 
-            self.get_prediction_intervalls() #iterations for prediction intervall
+            self.predict()
+            #TODO: make add_to_results()
             self.add_to_results()
+            window_end = time.time()
             
+            print(f"Window {i} executed in {window_end - window_start}s\n")
 
-    def set_exogenous_cols(exog_cols: list):
-        #TODO: probably better as model class! (see lstm set_exogenous_cols())
+        all_windows_end = time.time()
+        self.stats["run_duration"] = all_windows_end - all_windows_start #TODO: move to setter?
+        print(f"\nTotal time for all windows {all_windows_end - all_windows_start}s")
+        #TODO: make functions:
+        self.add_stepwise_difference()
+        self.get_stepwise_errors()
+        self.save_results()
+  
+    def set_prediction_column(self, prediction_column: str=None):
+        #Copied from LSTM
+        #TODO: maybe move to Model base class?
+        """
+        Docstring for set_prediction_column
+        
+        Args:
+            prediction_column (str): Pass the string of the column name, whcih should be predicted.
+
+        Raises:
+            ValueError if no string supplied/argument is empty
+        """
+
+        if not prediction_column:
+            raise ValueError("'column_to_predict' cant be empty") 
+        
+        self.params["prediction_column"] = prediction_column
+
+    def create_result_dir(self):
+        #TODO: move to base class Model
+        #Save model weights (first create dir, then save):
+        #TODO: evaluate if this helps with memory leak, otherwise delete: --> creating once and reloading initial weights of model helps/solves mem leak
+        # -> only build model once before window-loop, save weights on compile, then load 
+        # again every iteration:
+        #date+hh:mm+grid(id if doing grid search)
+        self.date = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if self.id == None:
+            self.dir_name = f"{self.date}-lstm"
+        elif self.id != None:
+            self.dir_name = f"{self.date}-{self.id}-lstm"
+
+
+        #make directory with name (see above)
+        print(f"Creating directory {self.dir_name}")
+        print(f"Saving params to {self.dir_name}")
+        self.file_path = "./results/"+self.dir_name
+        Path(self.file_path).mkdir(parents=True, exist_ok=True)
+
+
+
+
+    def set_exogenous_cols(self, exog_cols: list):
+        #TODO: probably better in Model class!
 
         #copied from ModelLSTM:
         #Check df/exog_cols input for validity
@@ -1853,16 +1930,24 @@ class ModelProphet(Model):
                 
         self.params["exog_cols"] = exog_cols
 
+    def set_model_parameters(self, lower_limit: float=2.5, upper_limit: float=97.5):
+
+        self.params["lower_limit"] = lower_limit
+        self.params["upper_limit"] = upper_limit
 
 
     def print_params(self):
-        #TODO: probably better as model class!
+        #TODO: probably better in Model class!
+        #copied from ModelLSTM:
+
         for key, value in self.params.items():
             print(key, ": ", value)
         
 
     def get_params_df(self):
-        #TODO: probably better as model class!
+        #TODO: probably better in Model class!
+        #copied from ModelLSTM:
+
         """
         Returns params as df
         """
@@ -1870,43 +1955,197 @@ class ModelProphet(Model):
 
         return params_df
 
-    def build_model(self):
 
 
+    @timer_func
+    def get_start_end_days(self, window):
+        #TODO: probably better in Model class! --> No, i dont think, because at least for 
+        # Prophet i think should be different than lstm?
 
-    def reset_states(self):
-        print("TODO: reset_states()")
 
+        self.train_start = window[0]
+        self.train_end = window[1]
+        self.test_start = window[2]
+        self.test_end = window[3] + pd.Timedelta(days=1)
 
+        self.forecast_days = (window[3] - window[2]).days #because window[2] and window[3] should be both included as days
 
+    @timer_func
     def get_data(self):
-        print("TODO: get_data()")
+        #TODO: probably better in Model class!
+        #TODO: Description of get_data
+
+
+        if not self.params["prediction_column"]:
+            raise ValueError(f"Missing the column to predict ({self.params['predcition_column']})")
+        
+        columns = list(set([self.params["prediction_column"], *self.params["exog_cols"]]))#star* to unpack list, pred_cols is str only.
+
+        # self.prophet_train = (self.data.loc[self.train_start : self.train_end, columns]
+        self.prophet_train = (self.data.loc[self.train_start : self.train_end, columns]
+                              #.values
+                              .reset_index()
+                              .rename(columns={"date":"ds", self.params["prediction_column"]:"y"})
+                              )
+
+      
+    def scale_data(self):
+        #NOT necessary for Prophet
+        #TODO: delete (this is only reminder, what to move to Model class and what not)
+        pass
+
+
+    def get_training_test_set(self):
+        #NOT necessary for Prophet
+        #TODO: delete (this is only reminder, what to move to Model class and what not)
+        pass
+
+    def get_prediction_intervalls(self):
+        #TODO: delete (this is only reminder, what to move to Model class and what not)
+        #NOT necessary for Prophet
         pass
 
 
 
-    def get_training_test_set(self):
-        print("TODO: get_raining_test_set()")
-
-
     def build_model(self):
-        prophet_train = (
-            train_df[pred_col]
-            .reset_index()
-            .rename(columns={"date":"ds", "count":"y"})
-        )
+        interval_width = (self.params["upper_limit"] - self.params["lower_limit"]) / 100
 
-        self.model = Prophet(weekly_seasonality=True, interval_width=0.95)
+        self.model = Prophet(weekly_seasonality=True, interval_width=interval_width)
+
         self.model.add_country_holidays(country_name="Austria")
 
-    def fit_model(self):
-        self.model.fit(prophet_train)
-        future_dates = self.model.make_future_dataframe(periods=365, freq="D")
 
+        pass
+
+    def fit_model(self):
+        self.model.fit(self.prophet_train) #rename? But X_train doesnt really make sense imo
 
     def predict(self):
-        self.predictions = self.model.predict(future_dates)
+        #TODO: naming is not really descriptive!
+        #initialize predictions-dataframe -- contains training + prediciton periods!
+        self.forecast_df = self.model.make_future_dataframe(periods=self.forecast_days, freq="D")
+
+        #predict
+        self.forecast = self.model.predict(self.forecast_df)
+
+
+    @timer_func
+    def add_to_results(self):
+        #Initialize self.predictions if not exists.
+        # Creates n (=forecast_days) empty dataframes in a dict, each containing datetime index from day_n in the 
+        # test/validation period.  
+        #TODO: better to implement in __init__
+        if not hasattr(self, "predictions") or self.predictions == None or type(self.predictions) == list:
+            self.predictions = {}
+            for fc_day in range(self.forecast_days):
+                day_label = f"Day_{fc_day + 1}"
+
+                start_date = self.validation_sets[0][2]
+                end_date = self.validation_sets[-1][2] + pd.Timedelta(days=fc_day)
+
+                self.predictions[day_label] = pd.DataFrame(
+                    index=pd.date_range(start_date, end_date),
+                    columns=["Actual", "Mean", "Lower", "Upper"]
+                )
+
+        #fill the dataframes
+        for day in range(self.forecast_days):
+            day_label = f"Day_{day + 1}"
+            forecast_date = self.test_start + pd.Timedelta(days=day)
+
+            day_predictions = self.forecast.set_index("ds").loc[forecast_date] #df of all fc + all descriptive columns; from trainstart to testend!
+            
+            self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.params["prediction_column"]]
+            self.predictions[day_label].loc[forecast_date, "Mean"] = day_predictions["yhat"]
+            self.predictions[day_label].loc[forecast_date, "Lower"] = day_predictions["yhat_lower"]
+            self.predictions[day_label].loc[forecast_date, "Upper"] = day_predictions["yhat_upper"]
+            #self.predictions[day_label].loc[forecast_date, "Difference"] = self.predictions[day_label].loc[forecast_date, "Actual"] - self.predictions[day_label].loc[forecast_date, "Mean"]
+
+
+
+    def reset_states(self):
+        #TODO: delete (this is only reminder, what to move to Model class and what not)
+        #NOT necessary for Prophet (probably ig)
+        #Maybe at the end of all windows?
+        pass
+
+    @timer_func
+    def add_stepwise_difference(self):
+        #todo: COPIED FROM lstm, SHOUDL BE in base Model class?
+        #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
+        # would need changes to structure of result.
         
+        #This funcction adds a column with difference between Actual and Mean (=Prediction) to result dfs
+        #Put it directly inside add_to_results(), so shouldnt be needed anymore.
+        for fc_day, df in self.predictions.items():
+            df["Difference"] = df["Actual"] - df["Mean"] 
+
+
+    @timer_func
+    def get_stepwise_errors(self):
+        #TODO: copied from lstm, should be in base Model Class i thhink?
+        #since lstm currently has different architecture of dataframes for results, ill make a new
+        #function here. old (comparison, (s)arima) will be adjusted to be same as lstm model.
+
+
+        #initialize empty df with structure like stepwise_forecasts (cols, indices, no content)
+        forecast_steps = self.predictions.keys()
+        errors = ["ME", "MAE", "MedAE", "MAPE", "RMSE", "MASE", "MaxError"]
+
+        self.forecast_errors = pd.DataFrame(columns=errors, index=forecast_steps)
+
+        self.forecast_errors = pd.DataFrame()
+        for fc_day, df in self.predictions.items():
+
+            y_pred = df["Mean"].dropna()
+            y_true = df["Actual"].dropna()
+            
+            self.forecast_errors.loc[fc_day, "ME"] = np.median(y_pred - y_true) #median error -- shows bias (positive or negative)
+            self.forecast_errors.loc[fc_day, "MAE"] = metrics.mean_absolute_error(y_pred=y_pred, y_true=y_true)
+            self.forecast_errors.loc[fc_day, "MedAE"] = metrics.median_absolute_error(y_pred=y_pred, y_true=y_true)
+            self.forecast_errors.loc[fc_day, "MAPE"] = metrics.mean_absolute_percentage_error(y_pred=y_pred, y_true=y_true)
+            self.forecast_errors.loc[fc_day, "MSE"] = metrics.mean_squared_error(y_pred=y_pred, y_true=y_true)
+            self.forecast_errors.loc[fc_day, "RMSE"] = metrics.root_mean_squared_error(y_pred=y_pred, y_true=y_true)
+            # self.stepwise_forecast_errors.loc[fc_day, "MASE"] = metrics.mean_absolute_scaled_error(y_pred=y_pred, y_true=y_true) #MAE/
+            self.forecast_errors.loc[fc_day, "MaxError"] = metrics.max_error(y_pred=y_pred, y_true=y_true)
+
+
+    @timer_func
+    def save_results(self):
+        #Creates new directory where it saves self.params as a json and every dataframe for the results
+
+        # -> Moved filepath creation to build_model (to save weights) and store in self.file_path
+        #date+hh:mm+grid(id if doing grid search)
+        # date = datetime.now().strftime("%Y%m%d_%H%M")
+        # if self.id == None:
+        #     dir_name = f"{date}-lstm"
+        # elif self.id != None:
+        #     dir_name = f"{date}-{self.id}-lstm"
+
+
+        # #make directory with name (see above)
+        # print(f"Creating directory {dir_name}")
+        # print(f"Saving params to {dir_name}")
+        # file_path = "./results/"+dir_name
+        # Path(file_path).mkdir(parents=True, exist_ok=True)
+
+        #make params json
+        with open("./results/"+self.dir_name+"/params.json", "w") as f:
+            json.dump(self.params, f)
+
+        #Save self.predictions (each df individually)
+        print(f"Saving forecasts to {self.dir_name}")
+        for fc_day, df in self.predictions.items():
+            print("Key: ", fc_day)
+            print("Value: ", df)
+            df.to_csv(path_or_buf=self.file_path+"/"+fc_day+".csv" ,sep=";")
+
+        #Save Error Values df
+        with open("./results/"+self.dir_name+"/forecast_errors.csv", "w") as f:
+            self.forecast_errors
+
+        print(f"Finished saving file to {self.dir_name}")
+
 
 
 

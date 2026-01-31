@@ -682,37 +682,30 @@ exog_cols = ["use_discarded", "use_expired", 'ward_AN', 'ward_CH', 'ward_I1', 'w
 m_prophet.set_validation_rolling_window(
     #TODO: store validation_sets as df: index + columns train start/train end/test start/test end
     #TODO: add option to choose days for train and test period.
-    train_percent=0.8,#9,#985,#975,
+    train_percent=0.95,#9,#985,#975,
     test_len=14, 
-    start_date="2021-01-01"
+    start_date="2024-01-01"
 )
 
 #%%
-lstm_m.set_model_parameters(
-    inner_window = 365*2, #365,#200,#365, #365*2 #365 to capture at least 1 year, #for training length
-
-    memory_cells=64,#64
-    epochs=20,#20
-    batch_size=32, #32
-    dropout=0.5,
-    pi_iterations=100, #100 #how often to run, to calculate prediction intervals
-    optimizer="adam",
-    loss="mae",
-    activation_fct="relu",
+m_prophet.set_model_parameters(
     lower_limit=2.5,
     upper_limit=97.5
 )
-lstm_m.set_exogenous_cols(exog_cols = exog_cols)
-lstm_m.set_prediction_column(prediction_column="use_transfused")
+m_prophet.set_exogenous_cols(exog_cols = exog_cols)
+m_prophet.set_prediction_column(prediction_column="use_transfused")
 
-lstm_m.print_params()
+m_prophet.print_params()
 
-lstm_params = lstm_m.get_params_df()
+lstm_params = m_prophet.get_params_df()
 #%%
 #Run model
-lstm_m.model_run()
+m_prophet.model_run()
+
+#%%
 
 
+#%% #Trying to run wihtout Object oriented
 
 from prophet import Prophet
 
