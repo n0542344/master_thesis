@@ -122,6 +122,29 @@ class Model:
     #------------------------------------------------------------------------------------------------
 
     #------------------------------------------------------------------------------------------------
+    # GETTERS & Print
+    # MARK: Getters
+
+    def print_params(self):
+        #TODO: probably better in Model class!
+        for key, value in self.model_params.items():
+            print(key, ": ", value)
+        
+
+    def get_params_df(self):
+        """
+        Returns params as df
+        """
+        #TODO: probably better in Model class!
+
+        params_df = pd.DataFrame([self.model_params]) #bracket to keep everything in one row
+
+        return params_df
+
+
+
+
+    #------------------------------------------------------------------------------------------------
     # SETTERS
     # MARK: Setters
 
@@ -244,6 +267,52 @@ class Model:
         # then get_prediction is coded, to set alpha inside fct by default to 0.05
         self.alpha = alpha
 
+
+    def set_prediction_column(self, prediction_column: str=None):
+        #TODO: moved here from LSTM
+        """
+        Docstring for set_prediction_column
+        
+        Args:
+            prediction_column (str): Pass the string of the column name, whcih should be predicted.
+
+        Raises:
+            ValueError if no string supplied/argument is empty
+        """
+
+        if not prediction_column:
+            raise ValueError("'column_to_predict' cant be empty") 
+        
+        self.model_params["prediction_column"] = prediction_column
+
+
+
+
+    def set_exogenous_cols(self, exog_cols: list):
+        """Set columns to use for exogenous variables with LSTM. 
+        Sets member variables' "param" (dict) key "exog_cols" to value of input parameter.
+
+        Args:
+            exog_cols (list): List of strings containing column names for exog vars (in self.data)
+
+        Raises:
+            ValueError: If exog_cols list is empty. Doesnt check for data type.
+            ValueError: If a column from exog_cols is not present in 'df'
+            ValueError: If a list item is not a string.
+        """
+        #TODO: probably better in Model class!
+
+        #Check df/exog_cols input for validity
+        if len(exog_cols) == 0:
+            raise ValueError("Need to pass col name present in 'df' to exog_cols")
+        else:
+            for col in exog_cols:
+                if col not in self.data.columns:
+                    raise ValueError(f"{col} not present df's columns: {self.data.columns}")
+                elif type(col) != str:
+                    raise ValueError(f"{col} not a string -- only string colnames allowed")
+                
+        self.model_params["exog_cols"] = exog_cols
 
 
 
@@ -1374,21 +1443,6 @@ class ModelLSTM(Model):
 
 
 
-    def set_prediction_column(self, prediction_column: str=None):
-        """
-        Docstring for set_prediction_column
-        
-        Args:
-            prediction_column (str): Pass the string of the column name, whcih should be predicted.
-
-        Raises:
-            ValueError if no string supplied/argument is empty
-        """
-
-        if not prediction_column:
-            raise ValueError("'column_to_predict' cant be empty") 
-        
-        self.model_params["prediction_column"] = prediction_column
 
 
     def set_model_parameters(
@@ -1420,54 +1474,11 @@ class ModelLSTM(Model):
 
 
 
-    def set_exogenous_cols(self, exog_cols: list):
-        """Set columns to use for exogenous variables with LSTM. 
-        Sets member variables' "param" (dict) key "exog_cols" to value of input parameter.
-
-        Args:
-            exog_cols (list): List of strings containing column names for exog vars (in self.data)
-
-        Raises:
-            ValueError: If exog_cols list is empty. Doesnt check for data type.
-            ValueError: If a column from exog_cols is not present in 'df'
-            ValueError: If a list item is not a string.
-        """
-        #TODO: probably better in Model class!
-
-        #Check df/exog_cols input for validity
-        if len(exog_cols) == 0:
-            raise ValueError("Need to pass col name present in 'df' to exog_cols")
-        else:
-            for col in exog_cols:
-                if col not in self.data.columns:
-                    raise ValueError(f"{col} not present df's columns: {self.data.columns}")
-                elif type(col) != str:
-                    raise ValueError(f"{col} not a string -- only string colnames allowed")
-                
-        self.model_params["exog_cols"] = exog_cols
-
-
 
     #------------------------------------------------------------------------------------------------
     # MARK: Getters/Print
     #------------------------------------------------------------------------------------------------
 
-
-    def print_params(self):
-        #TODO: probably better in Model class!
-        for key, value in self.model_params.items():
-            print(key, ": ", value)
-        
-
-    def get_params_df(self):
-        """
-        Returns params as df
-        """
-        #TODO: probably better in Model class!
-
-        params_df = pd.DataFrame([self.model_params]) #bracket to keep everything in one row
-
-        return params_df
 
 
 
@@ -1532,8 +1543,6 @@ class ModelLSTM(Model):
 
 
 
-
-
     @timer_func
     def scale_data(self):
         """
@@ -1569,6 +1578,7 @@ class ModelLSTM(Model):
         # self.y_train_scaled = self.y_train_scaled.reshape(1, self.y_train_scaled.shape[0]) #TODO: shape[0] should be equal to self.forecast_days
         # self.X_test_scaled = self.X_test_scaled.reshape(1, self.X_test_scaled.shape[0], self.X_test_scaled.shape[1])
         # self.y_test_scaled = self.y_test_scaled.reshape(1, self.y_test_scaled.shape[0])
+
 
 
     @timer_func
@@ -1654,18 +1664,7 @@ class ModelLSTM(Model):
     
 
     @timer_func
-    def get_prediction_intervalls(self):
-
-        # self.all_predictions = []
-
-        # for _ in range(self.model_params["pi_iterations"]):
-        #     self.all_predictions.append(
-        #         self.scaler_y.inverse_transform(self.model(self.X_test, training=True, verbose=0).numpy())
-        #     )
-
-        # self.all_predictions = np.array(self.all_predictions)
-        
-        
+    def get_prediction_intervalls(self):      
         # Repeat X_test 'n' times along a new axis
         # If X_test is (samples, time, features), tiled becomes (iterations, samples, time, features)
         n_iter = self.model_params["pi_iterations"]
@@ -1691,9 +1690,11 @@ class ModelLSTM(Model):
 
 
 
+
     @timer_func
     def add_to_results(self):
-        #TODO: move to base class 'Model'?
+        #TODO: move to base class 'Model'? --> difference between LSTM/Prophet: y_test_orgiinal_scale, day_predictions
+        
         #Add to existing self.predictions dictionary. self.predictions contains n keys of name "Day_"n_i where n=len(fc_days)
         # with the value of a dataframe with columns Actual, Mean, Lower, Upper and datetime index. 
         # Each dataframe gets expanded/filled in every window-iteration by the current (of the window) value of the day
@@ -1718,7 +1719,6 @@ class ModelLSTM(Model):
                     columns=["Actual", "Mean", "Lower", "Upper"]
                 )
 
-        y_test_original_scale = self.scaler_y.inverse_transform(self.y_test)
 
         #fill the dataframes
         for day in range(self.forecast_days):
@@ -1727,11 +1727,12 @@ class ModelLSTM(Model):
 
             day_predictions = self.all_predictions[:, 0, day] #shape of (np_iterations, 1, forecast_days)
 
-            self.predictions[day_label].loc[forecast_date, "Actual"] = y_test_original_scale[0, day]
+            self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.model_params["prediction_column"]]
+            # y_test_original_scale = self.scaler_y.inverse_transform(self.y_test) #old LSTM way: set this line above for-day range
+            # self.predictions[day_label].loc[forecast_date, "Actual"] = y_test_original_scale[0, day]
             self.predictions[day_label].loc[forecast_date, "Mean"] = np.mean(day_predictions, axis=None) #alternative: axis=0)[0]
             self.predictions[day_label].loc[forecast_date, "Lower"] = np.percentile(day_predictions, 2.5, axis=None)
             self.predictions[day_label].loc[forecast_date, "Upper"] = np.percentile(day_predictions, 97.5, axis=None)
-            #self.predictions[day_label].loc[forecast_date, "Difference"] = self.predictions[day_label].loc[forecast_date, "Actual"] - self.predictions[day_label].loc[forecast_date, "Mean"]
 
     @timer_func
     def reset_states(self):
@@ -1835,62 +1836,10 @@ class ModelProphet(Model):
         self.get_stepwise_errors()
         self.save_results()
   
-    def set_prediction_column(self, prediction_column: str=None):
-        #Copied from LSTM
-        #TODO: maybe move to Model base class?
-        """
-        Docstring for set_prediction_column
-        
-        Args:
-            prediction_column (str): Pass the string of the column name, whcih should be predicted.
-
-        Raises:
-            ValueError if no string supplied/argument is empty
-        """
-
-        if not prediction_column:
-            raise ValueError("'column_to_predict' cant be empty") 
-        
-        self.model_params["prediction_column"] = prediction_column
-
-    def create_result_dir(self):
-        #TODO: move to base class Model
-        #Save model weights (first create dir, then save):
-        #TODO: evaluate if this helps with memory leak, otherwise delete: --> creating once and reloading initial weights of model helps/solves mem leak
-        # -> only build model once before window-loop, save weights on compile, then load 
-        # again every iteration:
-        #date+hh:mm+grid(id if doing grid search)
-        self.date = datetime.now().strftime("%Y%m%d_%H%M%S")
-        if self.id == None:
-            self.dir_name = f"{self.date}-lstm"
-        elif self.id != None:
-            self.dir_name = f"{self.date}-{self.id}-lstm"
-
-
-        #make directory with name (see above)
-        print(f"Creating directory {self.dir_name}")
-        print(f"Saving params to {self.dir_name}")
-        self.file_path = "./results/"+self.dir_name
-        Path(self.file_path).mkdir(parents=True, exist_ok=True)
 
 
 
 
-    def set_exogenous_cols(self, exog_cols: list):
-        #TODO: probably better in Model class!
-
-        #copied from ModelLSTM:
-        #Check df/exog_cols input for validity
-        if len(exog_cols) == 0:
-            raise ValueError("Need to pass col name present in 'df' to exog_cols")
-        else:
-            for col in exog_cols:
-                if col not in self.data.columns:
-                    raise ValueError(f"{col} not present df's columns: {self.data.columns}")
-                elif type(col) != str:
-                    raise ValueError(f"{col} not a string -- only string colnames allowed")
-                
-        self.model_params["exog_cols"] = exog_cols
 
     def set_model_parameters(self, lower_limit: float=2.5, upper_limit: float=97.5):
 
@@ -1975,6 +1924,8 @@ class ModelProphet(Model):
 
     @timer_func
     def add_to_results(self):
+        #TODO: move to base class 'Model'? --> difference between LSTM/Prophet: y_test_orgiinal_scale, day_predictions
+
         #Initialize self.predictions if not exists.
         # Creates n (=forecast_days) empty dataframes in a dict, each containing datetime index from day_n in the 
         # test/validation period.  
