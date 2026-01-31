@@ -572,7 +572,7 @@ m_lstm.set_prediction_column(prediction_column="use_transfused")
 
 m_lstm.print_params()
 
-m_lstm = m_lstm.get_params_df()
+m_lstm.get_params_df()
 #%%
 #Run model
 m_lstm.model_run()

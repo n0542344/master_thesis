@@ -74,11 +74,11 @@ class Model:
         self.validation_sets = None
         #save forecasts as 1-day fc, 2-day-fc, for plotting:
         # when i set test_len as 7 days, i want to save all 1-day look aheads, all for the 2nd day etc
-        self.stepwise_forecasts = pd.DataFrame()
+        
+        self.stepwise_forecasts = pd.DataFrame()#TODO: in use anywhere or delete?
 
         #Model(s)
         self.models = []
-        self.model_fits = []
         self.predictions = []
         #self.model_runs = list() #List of past runs
         #TODO: save model runs as well as their state (parameters etc.)
@@ -104,7 +104,7 @@ class Model:
         self.stepwise_forecast_difference = pd.DataFrame()
 
         #Dont think is needed:
-        #self.params = None #rename; prob better in base class.
+        #self.model_params = None #rename; prob better in base class.
 
 
 
@@ -251,6 +251,165 @@ class Model:
     #------------------------------------------------------------------------------------------------
     # General
     # MARK: General
+
+    def create_result_dir(self):
+        #TODO: move to base class Model
+        #Save model weights (first create dir, then save):
+        #TODO: evaluate if this helps with memory leak, otherwise delete: --> creating once and reloading initial weights of model helps/solves mem leak
+        # -> only build model once before window-loop, save weights on compile, then load 
+        # again every iteration:
+        #date+hh:mm+grid(id if doing grid search)
+        self.date = datetime.now().strftime("%Y%m%d_%H%M")
+        if self.id == None:
+            self.dir_name = f"{self.date}-lstm"
+        elif self.id != None:
+            self.dir_name = f"{self.date}-{self.id}-lstm"
+
+
+        #make directory with name (see above)
+        print(f"Creating directory {self.dir_name}")
+        print(f"Saving params to {self.dir_name}")
+        self.file_path = "./results/"+self.dir_name
+        Path(self.file_path).mkdir(parents=True, exist_ok=True)
+
+    @timer_func
+    def save_results(self):
+        #Creates new directory where it saves self.model_params as a json and every dataframe for the results
+
+        # -> Moved filepath creation to build_model (to save weights) and store in self.file_path
+        #date+hh:mm+grid(id if doing grid search)
+        # date = datetime.now().strftime("%Y%m%d_%H%M")
+        # if self.id == None:
+        #     dir_name = f"{date}-lstm"
+        # elif self.id != None:
+        #     dir_name = f"{date}-{self.id}-lstm"
+
+
+        # #make directory with name (see above)
+        # print(f"Creating directory {dir_name}")
+        # print(f"Saving params to {dir_name}")
+        # file_path = "./results/"+dir_name
+        # Path(file_path).mkdir(parents=True, exist_ok=True)
+
+        #make params json
+        with open("./results/"+self.dir_name+"/params.json", "w") as f:
+            json.dump(self.model_params, f)
+
+        #Save self.predictions (each df individually)
+        print(f"Saving forecasts to {self.dir_name}")
+        for fc_day, df in self.predictions.items():
+            print("Key: ", fc_day)
+            print("Value: ", df)
+            df.to_csv(path_or_buf=self.file_path+"/"+fc_day+".csv" ,sep=";")
+
+        #Save Error Values df
+        with open("./results/"+self.dir_name+"/forecast_errors.csv", "w") as f:
+            self.forecast_errors
+
+        print(f"Finished saving file to {self.dir_name}")
+
+
+
+
+    @timer_func
+    def get_start_end_days(self, window):
+        #TODO: probably better in Model class!
+
+        # since lstm works better with running multiple inputs (like a rolling window) and supplying y  so it can adjust
+        # weights and biases more often. so we do an inner loop for the forecast window supplied by rolling/expanding window 
+        # (=validations_sets).
+        # This means we treat every validation set like its own timeframe, where we use , up to that day, and only
+        self.train_start = window[0]
+        self.train_end = window[1]
+        self.test_start = window[2]
+        self.test_end = window[3] - pd.Timedelta(days=1)
+
+        self.forecast_days = (window[3] - window[2]).days #because window[2] and window[3] should be both included as days
+
+
+    @timer_func
+    def get_data(self):
+        #TODO: probably better in Model class!
+        """
+        Using the input "window", which contains tuple of start + end date for both train and test sets, it returns
+        numpy arrays for each. VAlues are in format of original data (not scaled!) --> "raw".
+        Columns (exogenous, prediction) are taken from self.model_params.
+
+        Args:
+            window (tuple of pd.Datetime): Contains a tuple of pd.Datetime 
+                for start/end date of train set, start/end date of test set.
+
+        Raises:
+            ValueError: If no column to predict was set previously.
+
+        Returns:
+            X_train_raw: Numpy array containing prediction+exogenous columns in original format for training
+            y_train_raw: Numpy array containing one column for prediction column in original format for training
+            X_test_raw: Numpy array containing prediction+exogenous columns in original format for testing
+            y_test_raw: Numpy array containing one column for prediction column in original format for testing
+        """
+
+        #TODO: Description of get_data
+
+
+        if not self.model_params["prediction_column"]:
+            raise ValueError(f"Missing the column to predict ({self.model_params['predcition_column']})")
+        
+        columns = list(set([self.model_params["prediction_column"], *self.model_params["exog_cols"]]))#star* to unpack list, pred_cols is str only.
+        # print("cols: ", columns)
+
+        self.X_train_raw = self.data.loc[self.train_start : self.train_end, columns].values
+        self.y_train_raw = self.data.loc[self.train_start : self.train_end, self.model_params["prediction_column"]].values.reshape(-1, 1)
+
+        self.X_test_raw = self.data.loc[self.test_start : self.test_end, columns].values
+        self.y_test_raw = self.data.loc[self.test_start : self.test_end, self.model_params["prediction_column"]].values.reshape(-1, 1)
+      
+
+    @timer_func
+    def add_stepwise_difference(self):
+        #todo: COPIED FROM lstm, SHOUDL BE in base Model class?
+        #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
+        # would need changes to structure of result.
+        
+        #This funcction adds a column with difference between Actual and Mean (=Prediction) to result dfs
+        #Put it directly inside add_to_results(), so shouldnt be needed anymore.
+        for fc_day, df in self.predictions.items():
+            df["Difference"] = df["Actual"] - df["Mean"] 
+
+
+    
+    @timer_func
+    def get_stepwise_errors(self):
+        #TODO move to base class Model
+        #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
+        #since lstm currently has different architecture of dataframes for results, ill make a new
+        #function here. old (comparison, (s)arima) will be adjusted to be same as lstm model.
+
+
+        #initialize empty df with structure like stepwise_forecasts (cols, indices, no content)
+        forecast_steps = self.predictions.keys()
+        errors = ["ME", "MAE", "MedAE", "MAPE", "RMSE", "MASE", "MaxError"]
+
+        self.forecast_errors = pd.DataFrame(columns=errors, index=forecast_steps)
+
+        self.forecast_errors = pd.DataFrame()
+        for fc_day, df in self.predictions.items():
+
+            y_pred = df["Mean"].dropna()
+            y_true = df["Actual"].dropna()
+            
+            self.forecast_errors.loc[fc_day, "ME"] = np.median(y_pred - y_true) #median error -- shows bias (positive or negative)
+            self.forecast_errors.loc[fc_day, "MAE"] = metrics.mean_absolute_error(y_pred=y_pred, y_true=y_true)
+            self.forecast_errors.loc[fc_day, "MedAE"] = metrics.median_absolute_error(y_pred=y_pred, y_true=y_true)
+            self.forecast_errors.loc[fc_day, "MAPE"] = metrics.mean_absolute_percentage_error(y_pred=y_pred, y_true=y_true)
+            self.forecast_errors.loc[fc_day, "MSE"] = metrics.mean_squared_error(y_pred=y_pred, y_true=y_true)
+            self.forecast_errors.loc[fc_day, "RMSE"] = metrics.root_mean_squared_error(y_pred=y_pred, y_true=y_true)
+            # self.stepwise_forecast_errors.loc[fc_day, "MASE"] = metrics.mean_absolute_scaled_error(y_pred=y_pred, y_true=y_true) #MAE/
+            self.forecast_errors.loc[fc_day, "MaxError"] = metrics.max_error(y_pred=y_pred, y_true=y_true)
+
+
+
+
 
     def make_validation_set(self, steps: int=1):
         """
@@ -1188,16 +1347,7 @@ class ModelLSTM(Model):
         #LSTM-specific variable inits
         self.model = None
 
-        # self.params = None #rename; prob better in base class.
-        # self.memory_cells = None
-        # self.epochs = None
-        # self.batch_size = None
-        # self.dropout = None
-        # self.pi_iterations = None
-        # self.optimizer = None
-        # self.loss = None
-
-        self.params = {
+        self.model_params = {
             "prediction_column" : None,
 
             "memory_cells" : None,
@@ -1213,7 +1363,7 @@ class ModelLSTM(Model):
             "lower_limit" : None,
             "upper_limit" : None,
             "exog_cols" : None
-        } #rename; prob better in base class.
+        } #rename; prob better in base class. | 
 
 
 
@@ -1238,7 +1388,7 @@ class ModelLSTM(Model):
         if not prediction_column:
             raise ValueError("'column_to_predict' cant be empty") 
         
-        self.params["prediction_column"] = prediction_column
+        self.model_params["prediction_column"] = prediction_column
 
 
     def set_model_parameters(
@@ -1256,17 +1406,17 @@ class ModelLSTM(Model):
             upper_limit: float=97.5
             ):
         
-        self.params["inner_window"] = inner_window
-        self.params["memory_cells"] = memory_cells
-        self.params["epochs"] = epochs
-        self.params["batch_size"] = batch_size
-        self.params["dropout"] = dropout
-        self.params["pi_iterations"] = pi_iterations
-        self.params["optimizer"] = optimizer
-        self.params["loss"] = loss
-        self.params["activation_fct"] = activation_fct
-        self.params["lower_limit"] = lower_limit
-        self.params["upper_limit"] = upper_limit
+        self.model_params["inner_window"] = inner_window
+        self.model_params["memory_cells"] = memory_cells
+        self.model_params["epochs"] = epochs
+        self.model_params["batch_size"] = batch_size
+        self.model_params["dropout"] = dropout
+        self.model_params["pi_iterations"] = pi_iterations
+        self.model_params["optimizer"] = optimizer
+        self.model_params["loss"] = loss
+        self.model_params["activation_fct"] = activation_fct
+        self.model_params["lower_limit"] = lower_limit
+        self.model_params["upper_limit"] = upper_limit
 
 
 
@@ -1294,7 +1444,7 @@ class ModelLSTM(Model):
                 elif type(col) != str:
                     raise ValueError(f"{col} not a string -- only string colnames allowed")
                 
-        self.params["exog_cols"] = exog_cols
+        self.model_params["exog_cols"] = exog_cols
 
 
 
@@ -1305,7 +1455,7 @@ class ModelLSTM(Model):
 
     def print_params(self):
         #TODO: probably better in Model class!
-        for key, value in self.params.items():
+        for key, value in self.model_params.items():
             print(key, ": ", value)
         
 
@@ -1315,7 +1465,7 @@ class ModelLSTM(Model):
         """
         #TODO: probably better in Model class!
 
-        params_df = pd.DataFrame([self.params]) #bracket to keep everything in one row
+        params_df = pd.DataFrame([self.model_params]) #bracket to keep everything in one row
 
         return params_df
 
@@ -1364,115 +1514,23 @@ class ModelLSTM(Model):
             self.get_data() #get X_raw, y_raw data for every iteration in the sliding7expanding window (correct columns)
             self.scale_data()  #set scaler + transform to scaled data
             self.get_training_test_set()
-            # self.build_model()
             self.fit_model() #train model 
             self.get_prediction_intervalls() #iterations for prediction intervall
             self.add_to_results()
             
             window_end = time.time()
-            
-            # #TODO: testing for memory leak only:
-            # current_objs = gc.get_objects()
-            # current_ids = set(id(o) for o in current_objs)
-            # print("Len current ids: ", len(current_ids))
-            # if hasattr(self, 'previous_objs') and len(self.previous_objs) > 0:
-            #     # Find new objects that weren't there last iteration
-            #     new_ids = current_ids - self.previous_objs
-            #     print(f"\n--- {len(new_ids)} New Objects Created this Window ---")
-                
-            #     # inspect the first few
-            #     count = 0
-            #     for o in current_objs:
-            #         if id(o) in new_ids:
-            #             if "tensorflow" in str(type(o)).lower() or "keras" in str(type(o)).lower():
-            #                 print(f"Type: {type(o)}, Val: {str(o)[:50]}...")
-                            
-            #                 # print(f"Type: {type(o)}, Val: {str(o)[:50]}...")
-            #                 count += 1
-            #                 if count >= 15: break # Don't spam
-                            
-            # self.previous_objs = current_ids
-            # print("Len previous_objs: ", len(self.previous_objs))
-
-
             print(f"Window {i} executed in {window_end - window_start}s\n")
 
-        all_windows_end = time.time()
-        self.stats["run_duration"] = all_windows_end - all_windows_start #TODO: move to setter?
-        print(f"\nTotal time for all windows {all_windows_end - all_windows_start}s")
+        self.stats["total_duration"] = window_end - all_windows_start #TODO: move to setter?
+        print(f"\nTotal time for all windows {window_end - all_windows_start}s")
 
-        self.add_stepwise_difference_LSTM()
-        self.get_stepwise_errors_LSTM()
+        self.add_stepwise_difference()
+        self.get_stepwise_errors()
 
         self.save_results()
 
-        #TODO: error values.
-        # self.get_result_df() #make df with results (actual, pred. mean, upper/lower pred interv., )
-        # self.get_error_values() #stepwise error metrics
 
 
-        # #Get stepwise values:
-        # self.add_stepwise_forecasts()
-        # self.add_stepwise_errors(col_pred=pred_col)
-        # self.add_stepwise_difference(col_pred=pred_col)
-
-
-
-
-    @timer_func
-    def get_start_end_days(self, window):
-        #TODO: probably better in Model class!
-
-        # since lstm works better with running multiple inputs (like a rolling window) and supplying y  so it can adjust
-        # weights and biases more often. so we do an inner loop for the forecast window supplied by rolling/expanding window 
-        # (=validations_sets).
-        # This means we treat every validation set like its own timeframe, where we use , up to that day, and only
-        self.train_start = window[0]
-        self.train_end = window[1]
-        self.test_start = window[2]
-        self.test_end = window[3] - pd.Timedelta(days=1)
-
-        self.forecast_days = (window[3] - window[2]).days #because window[2] and window[3] should be both included as days
-
-
-
-    @timer_func
-    def get_data(self):
-        #TODO: probably better in Model class!
-        """
-        Using the input "window", which contains tuple of start + end date for both train and test sets, it returns
-        numpy arrays for each. VAlues are in format of original data (not scaled!) --> "raw".
-        Columns (exogenous, prediction) are taken from self.params.
-
-        Args:
-            window (tuple of pd.Datetime): Contains a tuple of pd.Datetime 
-                for start/end date of train set, start/end date of test set.
-
-        Raises:
-            ValueError: If no column to predict was set previously.
-
-        Returns:
-            X_train_raw: Numpy array containing prediction+exogenous columns in original format for training
-            y_train_raw: Numpy array containing one column for prediction column in original format for training
-            X_test_raw: Numpy array containing prediction+exogenous columns in original format for testing
-            y_test_raw: Numpy array containing one column for prediction column in original format for testing
-        """
-
-        #TODO: Description of get_data
-
-
-        if not self.params["prediction_column"]:
-            raise ValueError(f"Missing the column to predict ({self.params['predcition_column']})")
-        
-        columns = list(set([self.params["prediction_column"], *self.params["exog_cols"]]))#star* to unpack list, pred_cols is str only.
-        # print("cols: ", columns)
-
-        self.X_train_raw = self.data.loc[self.train_start : self.train_end, columns].values
-        self.y_train_raw = self.data.loc[self.train_start : self.train_end, self.params["prediction_column"]].values.reshape(-1, 1)
-
-        self.X_test_raw = self.data.loc[self.test_start : self.test_end, columns].values
-        self.y_test_raw = self.data.loc[self.test_start : self.test_end, self.params["prediction_column"]].values.reshape(-1, 1)
-      
 
 
 
@@ -1521,7 +1579,7 @@ class ModelLSTM(Model):
 
 
         # Create sliding window for our data (60days)
-        sliding_size = self.params["inner_window"] #TODO: maybe rename?
+        sliding_size = self.model_params["inner_window"] #TODO: maybe rename?
 
         # Prep training features
         self.X_train, self.y_train = [], []                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
@@ -1547,9 +1605,9 @@ class ModelLSTM(Model):
 
         inputs = Input(shape=(self.X_train.shape[1], self.X_train.shape[2])) #TODO: was 1, 2
         # inputs = Input(shape=(self.X_train_scaled.shape[1], self.X_train_scaled.shape[2])) #TODO: was 1, 2
-        x = layers.LSTM(self.params["memory_cells"], return_sequences=True, unroll=False)(inputs) #TODO: unroll=True (was before, testing if fixes memory leak)
-        x = layers.LSTM(self.params["memory_cells"], return_sequences=False)(x)
-        x = layers.Dense(2*self.params["memory_cells"], activation=self.params["activation_fct"])(x)
+        x = layers.LSTM(self.model_params["memory_cells"], return_sequences=True, unroll=False)(inputs) #TODO: unroll=True (was before, testing if fixes memory leak)
+        x = layers.LSTM(self.model_params["memory_cells"], return_sequences=False)(x)
+        x = layers.Dense(2*self.model_params["memory_cells"], activation=self.model_params["activation_fct"])(x)
         #MC dropout
         x = layers.Dropout(0.5)(x, training=True)
 
@@ -1559,32 +1617,13 @@ class ModelLSTM(Model):
         #make model
         self.model = keras.Model(inputs, outputs)
         self.model.compile(
-            optimizer=self.params["optimizer"], 
-            loss=self.params["loss"], 
+            optimizer=self.model_params["optimizer"], 
+            loss=self.model_params["loss"], 
             metrics=[keras.metrics.RootMeanSquaredError()]
             #jit_compile=True
         )
         self.model.save_weights(self.file_path+"/initial.weights.h5")
 
-    def create_result_dir(self):
-        #TODO: move to base class Model
-        #Save model weights (first create dir, then save):
-        #TODO: evaluate if this helps with memory leak, otherwise delete: --> creating once and reloading initial weights of model helps/solves mem leak
-        # -> only build model once before window-loop, save weights on compile, then load 
-        # again every iteration:
-        #date+hh:mm+grid(id if doing grid search)
-        self.date = datetime.now().strftime("%Y%m%d_%H%M")
-        if self.id == None:
-            self.dir_name = f"{self.date}-lstm"
-        elif self.id != None:
-            self.dir_name = f"{self.date}-{self.id}-lstm"
-
-
-        #make directory with name (see above)
-        print(f"Creating directory {self.dir_name}")
-        print(f"Saving params to {self.dir_name}")
-        self.file_path = "./results/"+self.dir_name
-        Path(self.file_path).mkdir(parents=True, exist_ok=True)
 
 
     
@@ -1596,8 +1635,8 @@ class ModelLSTM(Model):
         self.model.fit(
             x=self.X_train, 
             y=self.y_train, 
-            epochs=self.params["epochs"], 
-            batch_size=self.params["batch_size"], 
+            epochs=self.model_params["epochs"], 
+            batch_size=self.model_params["batch_size"], 
             verbose=0
         )
 
@@ -1605,11 +1644,11 @@ class ModelLSTM(Model):
         # train_data = tf.data.Dataset.from_tensor_slices((self.X_train, self.y_train))
     
         # # Cache in memory and prefetch the next batch while the CPU is training
-        # train_data = train_data.cache().shuffle(1000).batch(self.params["batch_size"]).prefetch(tf.data.AUTOTUNE)
+        # train_data = train_data.cache().shuffle(1000).batch(self.model_params["batch_size"]).prefetch(tf.data.AUTOTUNE)
 
         # self.model.fit(
         #     train_data, 
-        #     epochs=self.params["epochs"], 
+        #     epochs=self.model_params["epochs"], 
         #     verbose=0
         # )
     
@@ -1619,7 +1658,7 @@ class ModelLSTM(Model):
 
         # self.all_predictions = []
 
-        # for _ in range(self.params["pi_iterations"]):
+        # for _ in range(self.model_params["pi_iterations"]):
         #     self.all_predictions.append(
         #         self.scaler_y.inverse_transform(self.model(self.X_test, training=True, verbose=0).numpy())
         #     )
@@ -1629,14 +1668,14 @@ class ModelLSTM(Model):
         
         # Repeat X_test 'n' times along a new axis
         # If X_test is (samples, time, features), tiled becomes (iterations, samples, time, features)
-        n_iter = self.params["pi_iterations"]
+        n_iter = self.model_params["pi_iterations"]
         
         # Reshape X_test to (n_iter * samples, time, features)
         # This processes all MC samples in one forward pass
         x_tiled = np.tile(self.X_test, (n_iter, 1, 1))
         
         # Get all predictions in one batch
-        # preds = self.model.predict(x_tiled, batch_size=self.params["batch_size"], verbose=0)
+        # preds = self.model.predict(x_tiled, batch_size=self.model_params["batch_size"], verbose=0)
         #Change to keep training set to true, which keeps the dropout layer necessary for MC (pred intervalls)
         preds = self.model(x_tiled, training=True, verbose=0).numpy()
 
@@ -1654,6 +1693,7 @@ class ModelLSTM(Model):
 
     @timer_func
     def add_to_results(self):
+        #TODO: move to base class 'Model'?
         #Add to existing self.predictions dictionary. self.predictions contains n keys of name "Day_"n_i where n=len(fc_days)
         # with the value of a dataframe with columns Actual, Mean, Lower, Upper and datetime index. 
         # Each dataframe gets expanded/filled in every window-iteration by the current (of the window) value of the day
@@ -1737,84 +1777,6 @@ class ModelLSTM(Model):
 
 
 
-    @timer_func
-    def save_results(self):
-        #Creates new directory where it saves self.params as a json and every dataframe for the results
-
-        # -> Moved filepath creation to build_model (to save weights) and store in self.file_path
-        #date+hh:mm+grid(id if doing grid search)
-        # date = datetime.now().strftime("%Y%m%d_%H%M")
-        # if self.id == None:
-        #     dir_name = f"{date}-lstm"
-        # elif self.id != None:
-        #     dir_name = f"{date}-{self.id}-lstm"
-
-
-        # #make directory with name (see above)
-        # print(f"Creating directory {dir_name}")
-        # print(f"Saving params to {dir_name}")
-        # file_path = "./results/"+dir_name
-        # Path(file_path).mkdir(parents=True, exist_ok=True)
-
-        #make params json
-        with open("./results/"+self.dir_name+"/params.json", "w") as f:
-            json.dump(self.params, f)
-
-        #Save self.predictions (each df individually)
-        print(f"Saving forecasts to {self.dir_name}")
-        for fc_day, df in self.predictions.items():
-            print("Key: ", fc_day)
-            print("Value: ", df)
-            df.to_csv(path_or_buf=self.file_path+"/"+fc_day+".csv" ,sep=";")
-
-        #Save Error Values df
-        with open("./results/"+self.dir_name+"/forecast_errors.csv", "w") as f:
-            self.forecast_errors
-
-        print(f"Finished saving file to {self.dir_name}")
-
-
-    @timer_func
-    def add_stepwise_difference(self):
-        #TODO: move to base class Model
-        #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
-        # would need changes to structure of result.
-        
-        #This funcction adds a column with difference between Actual and Mean (=Prediction) to result dfs
-        #Put it directly inside add_to_results(), so shouldnt be needed anymore.
-        for fc_day, df in self.predictions.items():
-            df["Difference"] = df["Actual"] - df["Mean"] 
-
-    
-    @timer_func
-    def get_stepwise_errors(self):
-        #TODO move to base class Model
-        #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
-        #since lstm currently has different architecture of dataframes for results, ill make a new
-        #function here. old (comparison, (s)arima) will be adjusted to be same as lstm model.
-
-
-        #initialize empty df with structure like stepwise_forecasts (cols, indices, no content)
-        forecast_steps = self.predictions.keys()
-        errors = ["ME", "MAE", "MedAE", "MAPE", "RMSE", "MASE", "MaxError"]
-
-        self.forecast_errors = pd.DataFrame(columns=errors, index=forecast_steps)
-
-        self.forecast_errors = pd.DataFrame()
-        for fc_day, df in self.predictions.items():
-
-            y_pred = df["Mean"].dropna()
-            y_true = df["Actual"].dropna()
-            
-            self.forecast_errors.loc[fc_day, "ME"] = np.median(y_pred - y_true) #median error -- shows bias (positive or negative)
-            self.forecast_errors.loc[fc_day, "MAE"] = metrics.mean_absolute_error(y_pred=y_pred, y_true=y_true)
-            self.forecast_errors.loc[fc_day, "MedAE"] = metrics.median_absolute_error(y_pred=y_pred, y_true=y_true)
-            self.forecast_errors.loc[fc_day, "MAPE"] = metrics.mean_absolute_percentage_error(y_pred=y_pred, y_true=y_true)
-            self.forecast_errors.loc[fc_day, "MSE"] = metrics.mean_squared_error(y_pred=y_pred, y_true=y_true)
-            self.forecast_errors.loc[fc_day, "RMSE"] = metrics.root_mean_squared_error(y_pred=y_pred, y_true=y_true)
-            # self.stepwise_forecast_errors.loc[fc_day, "MASE"] = metrics.mean_absolute_scaled_error(y_pred=y_pred, y_true=y_true) #MAE/
-            self.forecast_errors.loc[fc_day, "MaxError"] = metrics.max_error(y_pred=y_pred, y_true=y_true)
-
 
 #xXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
@@ -1827,8 +1789,8 @@ class ModelProphet(Model):
         super().__init__(data)
         #prophet-specific variable inits
         self.model = None
-        # self.params = None #rename; prob better in base class.
-        self.params = {
+        # self.model_params = None #rename; prob better in base class.
+        self.model_params = {
             "prediction_column" : None,
             "exog_cols" : None,
 
@@ -1889,7 +1851,7 @@ class ModelProphet(Model):
         if not prediction_column:
             raise ValueError("'column_to_predict' cant be empty") 
         
-        self.params["prediction_column"] = prediction_column
+        self.model_params["prediction_column"] = prediction_column
 
     def create_result_dir(self):
         #TODO: move to base class Model
@@ -1928,19 +1890,19 @@ class ModelProphet(Model):
                 elif type(col) != str:
                     raise ValueError(f"{col} not a string -- only string colnames allowed")
                 
-        self.params["exog_cols"] = exog_cols
+        self.model_params["exog_cols"] = exog_cols
 
     def set_model_parameters(self, lower_limit: float=2.5, upper_limit: float=97.5):
 
-        self.params["lower_limit"] = lower_limit
-        self.params["upper_limit"] = upper_limit
+        self.model_params["lower_limit"] = lower_limit
+        self.model_params["upper_limit"] = upper_limit
 
 
     def print_params(self):
         #TODO: probably better in Model class!
         #copied from ModelLSTM:
 
-        for key, value in self.params.items():
+        for key, value in self.model_params.items():
             print(key, ": ", value)
         
 
@@ -1951,7 +1913,7 @@ class ModelProphet(Model):
         """
         Returns params as df
         """
-        params_df = pd.DataFrame([self.params]) #bracket to keep everything in one row
+        params_df = pd.DataFrame([self.model_params]) #bracket to keep everything in one row
 
         return params_df
 
@@ -1976,39 +1938,21 @@ class ModelProphet(Model):
         #TODO: Description of get_data
 
 
-        if not self.params["prediction_column"]:
-            raise ValueError(f"Missing the column to predict ({self.params['predcition_column']})")
+        if not self.model_params["prediction_column"]:
+            raise ValueError(f"Missing the column to predict ({self.model_params['predcition_column']})")
         
-        columns = list(set([self.params["prediction_column"], *self.params["exog_cols"]]))#star* to unpack list, pred_cols is str only.
+        columns = list(set([self.model_params["prediction_column"], *self.model_params["exog_cols"]]))#star* to unpack list, pred_cols is str only.
 
         # self.prophet_train = (self.data.loc[self.train_start : self.train_end, columns]
         self.prophet_train = (self.data.loc[self.train_start : self.train_end, columns]
                               #.values
                               .reset_index()
-                              .rename(columns={"date":"ds", self.params["prediction_column"]:"y"})
+                              .rename(columns={"date":"ds", self.model_params["prediction_column"]:"y"})
                               )
 
       
-    def scale_data(self):
-        #NOT necessary for Prophet
-        #TODO: delete (this is only reminder, what to move to Model class and what not)
-        pass
-
-
-    def get_training_test_set(self):
-        #NOT necessary for Prophet
-        #TODO: delete (this is only reminder, what to move to Model class and what not)
-        pass
-
-    def get_prediction_intervalls(self):
-        #TODO: delete (this is only reminder, what to move to Model class and what not)
-        #NOT necessary for Prophet
-        pass
-
-
-
     def build_model(self):
-        interval_width = (self.params["upper_limit"] - self.params["lower_limit"]) / 100
+        interval_width = (self.model_params["upper_limit"] - self.model_params["lower_limit"]) / 100
 
         self.model = Prophet(weekly_seasonality=True, interval_width=interval_width)
 
@@ -2055,7 +1999,7 @@ class ModelProphet(Model):
 
             day_predictions = self.forecast.set_index("ds").loc[forecast_date] #df of all fc + all descriptive columns; from trainstart to testend!
             
-            self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.params["prediction_column"]]
+            self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.model_params["prediction_column"]]
             self.predictions[day_label].loc[forecast_date, "Mean"] = day_predictions["yhat"]
             self.predictions[day_label].loc[forecast_date, "Lower"] = day_predictions["yhat_lower"]
             self.predictions[day_label].loc[forecast_date, "Upper"] = day_predictions["yhat_upper"]
@@ -2063,88 +2007,6 @@ class ModelProphet(Model):
 
 
 
-    def reset_states(self):
-        #TODO: delete (this is only reminder, what to move to Model class and what not)
-        #NOT necessary for Prophet (probably ig)
-        #Maybe at the end of all windows?
-        pass
-
-    @timer_func
-    def add_stepwise_difference(self):
-        #todo: COPIED FROM lstm, SHOUDL BE in base Model class?
-        #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
-        # would need changes to structure of result.
-        
-        #This funcction adds a column with difference between Actual and Mean (=Prediction) to result dfs
-        #Put it directly inside add_to_results(), so shouldnt be needed anymore.
-        for fc_day, df in self.predictions.items():
-            df["Difference"] = df["Actual"] - df["Mean"] 
-
-
-    @timer_func
-    def get_stepwise_errors(self):
-        #TODO: copied from lstm, should be in base Model Class i thhink?
-        #since lstm currently has different architecture of dataframes for results, ill make a new
-        #function here. old (comparison, (s)arima) will be adjusted to be same as lstm model.
-
-
-        #initialize empty df with structure like stepwise_forecasts (cols, indices, no content)
-        forecast_steps = self.predictions.keys()
-        errors = ["ME", "MAE", "MedAE", "MAPE", "RMSE", "MASE", "MaxError"]
-
-        self.forecast_errors = pd.DataFrame(columns=errors, index=forecast_steps)
-
-        self.forecast_errors = pd.DataFrame()
-        for fc_day, df in self.predictions.items():
-
-            y_pred = df["Mean"].dropna()
-            y_true = df["Actual"].dropna()
-            
-            self.forecast_errors.loc[fc_day, "ME"] = np.median(y_pred - y_true) #median error -- shows bias (positive or negative)
-            self.forecast_errors.loc[fc_day, "MAE"] = metrics.mean_absolute_error(y_pred=y_pred, y_true=y_true)
-            self.forecast_errors.loc[fc_day, "MedAE"] = metrics.median_absolute_error(y_pred=y_pred, y_true=y_true)
-            self.forecast_errors.loc[fc_day, "MAPE"] = metrics.mean_absolute_percentage_error(y_pred=y_pred, y_true=y_true)
-            self.forecast_errors.loc[fc_day, "MSE"] = metrics.mean_squared_error(y_pred=y_pred, y_true=y_true)
-            self.forecast_errors.loc[fc_day, "RMSE"] = metrics.root_mean_squared_error(y_pred=y_pred, y_true=y_true)
-            # self.stepwise_forecast_errors.loc[fc_day, "MASE"] = metrics.mean_absolute_scaled_error(y_pred=y_pred, y_true=y_true) #MAE/
-            self.forecast_errors.loc[fc_day, "MaxError"] = metrics.max_error(y_pred=y_pred, y_true=y_true)
-
-
-    @timer_func
-    def save_results(self):
-        #Creates new directory where it saves self.params as a json and every dataframe for the results
-
-        # -> Moved filepath creation to build_model (to save weights) and store in self.file_path
-        #date+hh:mm+grid(id if doing grid search)
-        # date = datetime.now().strftime("%Y%m%d_%H%M")
-        # if self.id == None:
-        #     dir_name = f"{date}-lstm"
-        # elif self.id != None:
-        #     dir_name = f"{date}-{self.id}-lstm"
-
-
-        # #make directory with name (see above)
-        # print(f"Creating directory {dir_name}")
-        # print(f"Saving params to {dir_name}")
-        # file_path = "./results/"+dir_name
-        # Path(file_path).mkdir(parents=True, exist_ok=True)
-
-        #make params json
-        with open("./results/"+self.dir_name+"/params.json", "w") as f:
-            json.dump(self.params, f)
-
-        #Save self.predictions (each df individually)
-        print(f"Saving forecasts to {self.dir_name}")
-        for fc_day, df in self.predictions.items():
-            print("Key: ", fc_day)
-            print("Value: ", df)
-            df.to_csv(path_or_buf=self.file_path+"/"+fc_day+".csv" ,sep=";")
-
-        #Save Error Values df
-        with open("./results/"+self.dir_name+"/forecast_errors.csv", "w") as f:
-            self.forecast_errors
-
-        print(f"Finished saving file to {self.dir_name}")
 
 
 
