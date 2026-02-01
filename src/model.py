@@ -442,7 +442,7 @@ class Model:
         
         #This funcction adds a column with difference between Actual and Mean (=Prediction) to result dfs
         #Put it directly inside add_to_results(), so shouldnt be needed anymore.
-        for fc_day, df in self.predictions.items():
+        for _, df in self.predictions.items():
             df["Difference"] = df["Actual"] - df["Mean"] 
 
 
@@ -480,7 +480,8 @@ class Model:
             day_label = f"Day_{day + 1}"
             forecast_date = self.test_start + pd.Timedelta(days=day)
 
-            day_predictions = self.all_predictions[:, 0, day] #shape of (np_iterations, 1, forecast_days)
+            day_predictions = self._get_day_predictions(day) #TODO: needs rework if refactoring to functional
+            # day_predictions = self.all_predictions[:, 0, day] #shape of (np_iterations, 1, forecast_days)
 
             self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.model_params["prediction_column"]]
             # y_test_original_scale = self.scaler_y.inverse_transform(self.y_test) #old LSTM way: set this line above for-day range
@@ -664,17 +665,17 @@ class Model:
             self.stepwise_forecast_errors.loc[col, "RMSE"] = metrics.root_mean_squared_error(y_pred=y_pred, y_true=y_true)
             self.stepwise_forecast_errors.loc[col, "MaxError"] = metrics.max_error(y_pred=y_pred, y_true=y_true)
 
-    def add_stepwise_difference(self, col_pred: str="count"):
-        """Get a df with the difference between the stepwise forecasted values and
-        the actual values. By default it subtracts 'count' from the daily stepwise
-        forecasted values and stores them in a new df called 'stepwise_forecast_difference'.
+    # def add_stepwise_difference(self, col_pred: str="count"):
+    #     """Get a df with the difference between the stepwise forecasted values and
+    #     the actual values. By default it subtracts 'count' from the daily stepwise
+    #     forecasted values and stores them in a new df called 'stepwise_forecast_difference'.
 
-        Args:
-            col (str, optional): Column name that should be subtracted from the forecasted values.
-            Defaults to "count".
-        """
-        y_true = self.data[col_pred].loc[self.stepwise_forecasts.index]
-        self.stepwise_forecast_difference = self.stepwise_forecasts.sub(y_true, axis=0)
+    #     Args:
+    #         col (str, optional): Column name that should be subtracted from the forecasted values.
+    #         Defaults to "count".
+    #     """
+    #     y_true = self.data[col_pred].loc[self.stepwise_forecasts.index]
+    #     self.stepwise_forecast_difference = self.stepwise_forecasts.sub(y_true, axis=0)
 
 
 
@@ -1460,6 +1461,8 @@ class ModelLSTM(Model):
         self.model = None
 
         self.model_params = {
+            #TODO: move first init to base class Model with 'global' model_params (if there are)
+            # then append to model_params empty(None) key-val pairs
             "prediction_column" : None,
 
             "memory_cells" : None,
@@ -1475,8 +1478,7 @@ class ModelLSTM(Model):
             "lower_limit" : None,
             "upper_limit" : None,
             "exog_cols" : None
-        } #rename; prob better in base class. | 
-
+        } 
 
 
 
@@ -1489,6 +1491,7 @@ class ModelLSTM(Model):
 
 
     def set_model_parameters(
+            #TODO: move to base class Model
             self, 
             inner_window: int=365,
             memory_cells: int=64,
@@ -1522,6 +1525,15 @@ class ModelLSTM(Model):
     # MARK: Getters/Print
     #------------------------------------------------------------------------------------------------
 
+
+    def _get_day_predictions(self, day):
+        #TODO: needs refacotring (added parameters) if refactoring to functional approach.
+        # Or maybe dont need this function anymore, if i just pass the predictions?
+
+        #Helper function needed, so i can use add_to_result from base
+        # class and only adjust this function for each child class
+         
+        return self.predictions_monte_carlo[:, 0, day] #shape of (np_iterations, 1, forecast_days)
 
 
 
@@ -1725,8 +1737,10 @@ class ModelLSTM(Model):
         preds = preds.reshape(n_iter, self.X_test.shape[0], self.forecast_days)
         
         # Inverse transform (optimized to handle the shape)
+        # array of all n-iterations predictions using monte carlo method
+        # to get pred intervals
         #TODO: rename (like all_predictions_monte_carlo or something?) 
-        self.all_predictions = np.array([
+        self.predictions_monte_carlo = np.array([
             self.scaler_y.inverse_transform(p).astype("float32") for p in preds
         ])
 
@@ -1847,40 +1861,6 @@ class ModelProphet(Model):
         self.model_params["upper_limit"] = upper_limit
 
 
-    def print_params(self):
-        #TODO: probably better in Model class!
-        #copied from ModelLSTM:
-
-        for key, value in self.model_params.items():
-            print(key, ": ", value)
-        
-
-    def get_params_df(self):
-        #TODO: probably better in Model class!
-        #copied from ModelLSTM:
-
-        """
-        Returns params as df
-        """
-        params_df = pd.DataFrame([self.model_params]) #bracket to keep everything in one row
-
-        return params_df
-
-
-
-    @timer_func
-    def get_start_end_days(self, window):
-        #TODO: probably better in Model class! --> No, i dont think, because at least for 
-        # Prophet i think should be different than lstm?
-
-
-        self.train_start = window[0]
-        self.train_end = window[1]
-        self.test_start = window[2]
-        self.test_end = window[3] + pd.Timedelta(days=1)
-
-        self.forecast_days = (window[3] - window[2]).days #because window[2] and window[3] should be both included as days
-
     @timer_func
     def get_data(self):
         #TODO: probably better in Model class!
@@ -1903,15 +1883,19 @@ class ModelProphet(Model):
     def build_model(self):
         interval_width = (self.model_params["upper_limit"] - self.model_params["lower_limit"]) / 100
 
-        self.model = Prophet(weekly_seasonality=True, interval_width=interval_width)
+        self.model = Prophet(
+            weekly_seasonality=True, 
+            interval_width=interval_width
+        )
 
         self.model.add_country_holidays(country_name="Austria")
 
 
-        pass
 
     def fit_model(self):
         self.model.fit(self.prophet_train) #rename? But X_train doesnt really make sense imo
+
+
 
     def predict(self):
         #TODO: naming is not really descriptive!
@@ -1921,6 +1905,19 @@ class ModelProphet(Model):
         #predict
         self.forecast = self.model.predict(self.forecast_df)
 
+
+    def _get_day_predictions(self, day):
+        #TODO: needs refacotring (added parameters) if refactoring to functional approach.
+        # Or maybe dont need this function anymore, if i just pass the predictions?
+
+        #Helper function needed, so i can use add_to_result from base
+        # class and only adjust this function for each child class
+        forecast_date = self.test_start + pd.Timedelta(days=day)
+
+        return self.forecast.set_index("ds").loc[forecast_date] #df of all fc + all descriptive columns; from trainstart to testend!
+
+
+        
 
 
 
