@@ -104,8 +104,9 @@ class Model:
         self.stepwise_forecast_difference = pd.DataFrame()
 
         #Dont think is needed:
-        #self.model_params = None #rename; prob better in base class.
-
+        self.model_params = {
+            "exog_cols" : None #rename; prob better in base class.
+        }
 
 
         #Decompositions: (s.u., gehört eig. nciht hierher)
@@ -224,8 +225,8 @@ class Model:
         self.validation_config = {
             "type" : "rolling window",
             "train_percent" : train_percent,
-            "test_len" : test_len,
-            "start_date" : start_date
+            "test_len" : test_len, #TODO: rename to forecast_window/len/days or something
+            "start_date" : start_date #TODO: rename to test_start_date or something?
         }
 
         self.make_validation_set()
@@ -436,6 +437,8 @@ class Model:
 
     @timer_func
     def add_stepwise_difference(self):
+        # oop FUNCTION, passt so! (=> brauch kein argument, verändert finale self.predictions variable)
+        #TODO: rename, like add_prediction_actual_difference
         #todo: COPIED FROM lstm, SHOUDL BE in base Model class?
         #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
         # would need changes to structure of result.
@@ -461,7 +464,7 @@ class Model:
         #Initialize self.predictions if not exists.
         # Creates n (=forecast_days) empty dataframes in a dict, each containing datetime index from day_n in the 
         # test/validation period.  
-        #TODO: better to implement in __init__ or its own function?
+        #TODO: move this part to own function called by __init__!
         if not hasattr(self, "predictions") or self.predictions == None or type(self.predictions) == list:
             self.predictions = {}
             for fc_day in range(self.forecast_days):
@@ -589,6 +592,7 @@ class Model:
 
 
     def add_stepwise_forecasts(self):
+        #TODO: i think this could be called on __init__?
         """
         Add stepwise_forecasts variable: dictionary containing number of keys in the length of test_len,
         with values as pandas Series of forecasted values for respective days to look ahead.
@@ -1094,29 +1098,31 @@ class ModelArima(Model):
 
     def __init__(self, data): #TODO: maybe add config, but more sense in base class imo
         super().__init__(data)
-        self.p = None
-        self.q = None
-        self.d = None
+        self.model_params = {
+            "p" : None,
+            "d" : None,
+            "q" : None
+        }
+
 
     #------------------------------------------------------------------------------------------------
     # Setters
     #------------------------------------------------------------------------------------------------
 
     def set_model_parameters(self, p: int=1, d: int=1, q: int=1):
-        self.p = p
-        self.d = d
-        self.q = q
+        self.model_params["p"] = p
+        self.model_params["d"] = d
+        self.model_params["q"] = q
+
 
 
 
     #composite function:
-    def model_run(self, col: str="count", print_fit_summary=True, last_only=True, days=None):
+    def model_run(self, print_fit_summary=True, last_only=True, days=None):
         """Composite function that combines make_model, fit(), print_fit_summary(), predict(),
         add_stepwise_forecasts()
 
         Args:
-            col (str, optional): column to make model and run prediction for.
-            Defaults to "count".
             print_fit_summary (bool, optional): If true, prints the summary for the fit().
             Defaults to True
             last_only (bool, optional): If true prints only summary for last fit(). Otherwise prints
@@ -1126,103 +1132,210 @@ class ModelArima(Model):
             validation_config by setter functions for rolling/expanding window or single split.
             Defaults to None, which will then use abovementioned value.
         """
+        self.create_result_dir()
 
-        self.make_model(col=col)
-        self.fit()
-        if print_fit_summary:
-            self.print_fit_summary(last_only=last_only)
-        self.get_prediction(days=days)
+        #TODO: Write docstring
+        all_windows_start = time.time()
+        self.stats["windows_num"] = len(self.validation_sets)
 
-        #Get stepwise values:
-        self.add_stepwise_forecasts()
-        self.add_stepwise_errors(col_pred=col)
-        self.add_stepwise_difference(col_pred=col)
-
-
-
-
-    def make_model(self, col: str):
-        """
-        create model with trainign data + (hyper)parameters
-
-        Parameters
-        ----------
-        col : string
-            column (target) to use for for univariate forecasting
-        """
         #Important!
         self.models = []
+
+        for i, window in enumerate(self.validation_sets):
+            model = self.make_model(window)
+            model_fit = self.fit(model)
+
+            if print_fit_summary:
+                self.print_fit_summary(model_fit)
+
+            preds = self.get_prediction_ARIMA(model_fit, window)
+
+            #Get stepwise values:
+            self.add_to_results_ARIMA(preds, test_start=window[2])
+
+        self.add_stepwise_difference()
+        self.get_stepwise_errors()
+        # self.add_stepwise_errors()
+        # self.add_stepwise_difference()
+
+    # #composite function:
+    # def model_run(self, col: str="count", print_fit_summary=True, last_only=True, days=None):
+    #     """Composite function that combines make_model, fit(), print_fit_summary(), predict(),
+    #     add_stepwise_forecasts()
+
+    #     Args:
+    #         col (str, optional): column to make model and run prediction for.
+    #         Defaults to "count".
+    #         print_fit_summary (bool, optional): If true, prints the summary for the fit().
+    #         Defaults to True
+    #         last_only (bool, optional): If true prints only summary for last fit(). Otherwise prints
+    #         summary for every fit (of rolling/expanding window).
+    #         Only relevant if print_fit_summary argument is true. defaults to True.
+    #         days (int, optional): Manually set days to look ahead (steps). Normally supplied via
+    #         validation_config by setter functions for rolling/expanding window or single split.
+    #         Defaults to None, which will then use abovementioned value.
+    #     """
+
+    #     self.make_model(col=col)
+    #     self.fit()
+    #     if print_fit_summary:
+    #         self.print_fit_summary(last_only=last_only)
+    #     self.get_prediction(days=days)
+
+    #     #Get stepwise values:
+    #     self.add_stepwise_forecasts()
+    #     self.add_stepwise_errors(col_pred=col)
+    #     self.add_stepwise_difference()
+
+
+    @timer_func
+    def add_to_results_ARIMA(self, pred_df, test_start):
+        #TODO: this for now is only for ARIMA, but its refactoring of add_to_results from
+        # Model class, but instead of OOP its Functional
+
+        #Create self.predictions datafrmae, which is final result of this models run (
+        #including all windows! contains each forecast days as separate df: Day_1:df, Day_2:df,
+        # where each df contains datetime index, actual vlaue, forecast, lower, upper 
+        # (and after all windows ran, also Difference is added between actual and pred)
+        #TODO: move this part to own function called by __init__!
+        if not hasattr(self, "predictions") or self.predictions == None or type(self.predictions) == list:
+            self.predictions = {}
+            for fc_day in range(self.validation_config["test_len"]):
+                day_label = f"Day_{fc_day + 1}"
+
+                start_date = self.validation_sets[0][2]
+                end_date = self.validation_sets[-1][2] + pd.Timedelta(days=fc_day)
+
+                self.predictions[day_label] = pd.DataFrame(
+                    index=pd.date_range(start_date, end_date),
+                    columns=["Actual", "Mean", "Lower", "Upper"]
+                )
+
+
+        #fill the dataframes
+        for day in range(self.validation_config["test_len"]):
+            day_label = f"Day_{day + 1}"
+            forecast_date = test_start + pd.Timedelta(days=day)
+
+            day_predictions = self._get_day_predictions(day, pred_df, test_start=test_start) #TODO: needs rework if refactoring to functional
+            # day_predictions = self.all_predictions[:, 0, day] #shape of (np_iterations, 1, forecast_days)
+
+            self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.model_params["prediction_column"]]
+            # y_test_original_scale = self.scaler_y.inverse_transform(self.y_test) #old LSTM way: set this line above for-day range
+            # self.predictions[day_label].loc[forecast_date, "Actual"] = y_test_original_scale[0, day]
+            self.predictions[day_label].loc[forecast_date, "Mean"] = np.mean(day_predictions, axis=None) #alternative: axis=0)[0]
+            self.predictions[day_label].loc[forecast_date, "Lower"] = np.percentile(day_predictions, 2.5, axis=None)
+            self.predictions[day_label].loc[forecast_date, "Upper"] = np.percentile(day_predictions, 97.5, axis=None)
+
+    def _get_day_predictions(self, day, pred_df, test_start):
+        forecast_date = test_start + pd.Timedelta(days=day)
+
+        return pred_df.loc[forecast_date]
+
+
+        
+
+    @timer_func
+    def make_model(self, window):
+        #TODO: add model description
+        # create model with trainign data + (hyper)parameters
+
 
         #TODO: set up split AND validation
         # i think for validation, best option to have a list of lists with train_start, train_end, test_start, test_end
         # days (datetime), which i can cycle here (make_model, fit, print_fit_summary, predict), which is just
         # inplace filtering of df, so i dont have to store multiple dfs!
-        series = self.data[col]
+
         #TODO: !use SARIMAX instead of ARIMA!
 
-        for train_set in self.validation_sets:
-            #Add exogenous, check for enforce_stationarity, enforce_invertibility
-            self.models.append(ARIMA(
-                endog=series[train_set[0] : train_set[1]],
-                order=(self.p, self.d, self.q)))
+        #Add exogenous, check for enforce_stationarity, enforce_invertibility
+        model = ARIMA(
+            endog=self.data.loc[window[0] : window[1], self.model_params["prediction_column"]],
+            order=(self.model_params["p"], 
+                    self.model_params["d"],
+                    self.model_params["q"]
+                    )
+        )
+
+        return model
 
 
-    def fit(self):
-        #Important!
-        self.model_fits = []
 
-        for model in self.models:
-            self.model_fits.append(model.fit())
+    @timer_func
+    def fit(self, model):
+        # #Important!
+        # self.model_fits = []
+
+        # for model in self.models:
+        #     self.model_fits.append(model.fit())
+        return model.fit()
 
 
-    def print_fit_summary(self, last_only=True):
-        if last_only:
-            print(self.model_fits[-1].summary())
-        else:
-            for fit in self.model_fits:
-                print(fit.summary())
+    def print_fit_summary(self, model_fit):
+        print(model_fit.summary())
 
-    def predict(self, days=None):
-        """Predict x days ahead, where x == 'days'
 
-        Args:
-            days (_type_, optional): Days to predict ahead. Defaults to None, then
-            days will be loaded from validation_config["test_len"].
-        """
-        # generate forecast for x time
-        # (see base class)
+    #Not in use, as far as i can see
+    # @timer_func
+    # def predict(self, days=None):
+    #     """Predict x days ahead, where x == 'days'
 
-        #Important!
-        self.predictions = []
+    #     Args:
+    #         days (_type_, optional): Days to predict ahead. Defaults to None, then
+    #         days will be loaded from validation_config["test_len"].
+    #     """
+    #     # generate forecast for x time
+    #     # (see base class)
 
-        if days == None:
-            days = self.validation_config["test_len"]
+    #     #Important!
+    #     self.predictions = []
 
-        for fit in self.model_fits:
-            self.predictions.append(fit
-                .get_forecast(steps=days)
-                .rename(columns={"predicted_mean":"Prediction"})
-            )
+    #     if days == None:
+    #         days = self.validation_config["test_len"]
 
-    def get_prediction(self, days=None, alpha: int=None):
+    #     for fit in self.model_fits:
+    #         self.predictions.append(fit
+    #             .get_forecast(steps=days)
+    #             .rename(columns={"predicted_mean":"Prediction"})
+    #         )
+
+
+    #TODO: rename to predict()
+    @timer_func
+    def get_prediction_ARIMA(self, model_fit, window):
 
         if self.alpha == None:
             alpha = 0.05
         elif self.alpha != None:
             alpha = self.alpha
         
-        self.predictions = []
+       
+        test_start = window[2]
+        test_end = window[3]
 
         #iterate over both model_fits and validation_sets:
-        for fit, validation_set in zip(self.model_fits, self.validation_sets): #'fit' is the fitted model
-            test_start = validation_set[2]
-            test_end = validation_set[3]
+        preds = (model_fit
+                       .get_prediction(start=test_start, end=test_end, dynamic=True)
+                       .summary_frame(alpha=alpha)
+                       .rename(columns={
+                           "mean":"Prediction",
+                           "mean_ci_lower": "lower_ci",
+                           "mean_ci_upper": "upper_ci"
+                           }
+                        )
+        )
 
-            self.predictions.append(fit
-                .get_prediction(start=test_start, end=test_end, dynamic=True)
-                .summary_frame(alpha=alpha)
-                .rename(columns={"mean":"Prediction"})
-            )
+        return preds
+        # #iterate over both model_fits and validation_sets:
+        # for fit, validation_set in zip(self.model_fits, self.validation_sets): #'fit' is the fitted model
+        #     test_start = validation_set[2]
+        #     test_end = validation_set[3]
+
+        #     self.predictions.append(fit
+        #         .get_prediction(start=test_start, end=test_end, dynamic=True)
+        #         .summary_frame(alpha=alpha)
+        #         .rename(columns={"mean":"Prediction"})
+        #     )
 
 
 
@@ -1252,7 +1365,7 @@ class ModelSarimax(Model):
         self.D = None
         self.m = None
         #eXogenous part:
-        self.exog_cols = None
+        #self.exog_cols = None
 
     #------------------------------------------------------------------------------------------------
     # MARK: Setters
@@ -1272,26 +1385,26 @@ class ModelSarimax(Model):
         self.m = m
 
 
-    def set_exogenous_vars(self, exog_cols: list):
-        """Set columns to use for exogenous variables with SARIMAX.
+    # def set_exogenous_vars(self, exog_cols: list):
+    #     """Set columns to use for exogenous variables with SARIMAX.
 
-        Args:
-            exog_cols (list): List of strings containing column names for exog vars (in self.data)
+    #     Args:
+    #         exog_cols (list): List of strings containing column names for exog vars (in self.data)
 
-        Raises:
-            ValueError: If exog_cols list is empty. Doesnt check for data type.
-            ValueError: If a column from exog_cols is not present in 'df'
-        """
-        #TODO: if no exog_cols supplied/argument is empty, set to None, and then do a check in model run, to run it w/o exog vars (SARIMA without X)
-        #Check df/exog_cols input for validity
-        if len(exog_cols) == 0:
-            raise ValueError("Need to pass col name present in 'df' to exog_cols")
-        else:
-            for col in exog_cols:
-                if col not in self.data.columns:
-                    raise ValueError(f"{col} not present df's columns: {self.data.columns}")
+    #     Raises:
+    #         ValueError: If exog_cols list is empty. Doesnt check for data type.
+    #         ValueError: If a column from exog_cols is not present in 'df'
+    #     """
+    #     #TODO: if no exog_cols supplied/argument is empty, set to None, and then do a check in model run, to run it w/o exog vars (SARIMA without X)
+    #     #Check df/exog_cols input for validity
+    #     if len(exog_cols) == 0:
+    #         raise ValueError("Need to pass col name present in 'df' to exog_cols")
+    #     else:
+    #         for col in exog_cols:
+    #             if col not in self.data.columns:
+    #                 raise ValueError(f"{col} not present df's columns: {self.data.columns}")
 
-        self.exog_cols = exog_cols
+    #     self.exog_cols = exog_cols
 
 
     #------------------------------------------------------------------------------------------------
@@ -1326,7 +1439,7 @@ class ModelSarimax(Model):
         #Get stepwise values:
         self.add_stepwise_forecasts()
         self.add_stepwise_errors(col_pred=pred_col)
-        self.add_stepwise_difference(col_pred=pred_col)
+        self.add_stepwise_difference()#col_pred=pred_col)
 
 
 
@@ -1350,19 +1463,19 @@ class ModelSarimax(Model):
         #TODO: !use SARIMAX instead of ARIMA!
 
 
-        if self.exog_cols == None:
+        if self.model_params["exog_cols"]  == None:
             for train_set in self.validation_sets:
                 self.models.append(SARIMAX(
                     endog=series[train_set[0] : train_set[1]],
                     order=(self.p, self.d, self.q),
                     seasonal_order=(self.P, self.D, self.Q, self.m)))
 
-        elif self.exog_cols != None:
+        elif self.model_params["exog_cols"] != None:
             # exogenous = self.data[exog]
             for train_set in self.validation_sets:
                 self.models.append(SARIMAX(
                     endog=series[train_set[0] : train_set[1]],
-                    exog=self.data.loc[train_set[0]:train_set[1], self.exog_cols],
+                    exog=self.data.loc[train_set[0]:train_set[1], self.model_params["exog_cols"]],
                     # exog=exogenous[train_set[0] : train_set[1]],
                     order=(self.p, self.d, self.q),
                     seasonal_order=(self.P, self.D, self.Q, self.m)))
@@ -1418,7 +1531,7 @@ class ModelSarimax(Model):
             test_start = validation_set[2]
             test_end = validation_set[3]
 
-            exog_prediction = self.data.loc[test_start:test_end, self.exog_cols]
+            exog_prediction = self.data.loc[test_start:test_end, self.model_params["exog_cols"]]
 
             self.predictions.append(fit
                 .get_prediction(start=test_start, end=test_end, exog=exog_prediction, dynamic=True)
@@ -1562,6 +1675,7 @@ class ModelLSTM(Model):
         self.get_training_test_set()
         self.build_model()
 
+        #Simulate individual past forecasts with windows:
         for i, window in enumerate(self.validation_sets):
             print(f"\n\nWindow {i}/{len(self.validation_sets)}")
             
@@ -1706,16 +1820,6 @@ class ModelLSTM(Model):
         )
 
 
-        # train_data = tf.data.Dataset.from_tensor_slices((self.X_train, self.y_train))
-    
-        # # Cache in memory and prefetch the next batch while the CPU is training
-        # train_data = train_data.cache().shuffle(1000).batch(self.model_params["batch_size"]).prefetch(tf.data.AUTOTUNE)
-
-        # self.model.fit(
-        #     train_data, 
-        #     epochs=self.model_params["epochs"], 
-        #     verbose=0
-        # )
     
 
     @timer_func
@@ -1743,8 +1847,6 @@ class ModelLSTM(Model):
         self.predictions_monte_carlo = np.array([
             self.scaler_y.inverse_transform(p).astype("float32") for p in preds
         ])
-
-
 
 
 
@@ -1909,7 +2011,7 @@ class ModelProphet(Model):
     def _get_day_predictions(self, day):
         #TODO: needs refacotring (added parameters) if refactoring to functional approach.
         # Or maybe dont need this function anymore, if i just pass the predictions?
-
+        #TODO: add description: what is this fct doing, WHY is it needed/whats the output!
         #Helper function needed, so i can use add_to_result from base
         # class and only adjust this function for each child class
         forecast_date = self.test_start + pd.Timedelta(days=day)

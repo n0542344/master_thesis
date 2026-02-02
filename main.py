@@ -427,11 +427,12 @@ arima = model.ModelArima(df)
 # Test runs (it works as expected)
 # arima.set_validation_expanding_window(train_percent=0.992, test_len=7, start_date="2022-01-01")
 # arima.set_validation_single_split(train_percent=0.75)
+arima.set_prediction_column(prediction_column=config.COLUMN)
 arima.set_validation_rolling_window(train_percent=0.975, test_len=7, start_date=config.DEV_START_DATE) #TODO: change date/remove it
 
 arima.set_model_parameters(7, 1, 1) #7,1,1, #TODO: add hyperparam grid
-arima.model_run(col=config.COLUMN)
-
+arima.model_run()
+#%%
 #Try out stepwise error measurements (now only mae):
 arima.plot_stepwise(plot_type="forecast") #forecast
 arima.plot_stepwise(plot_type="forecast difference") #forecast
@@ -508,7 +509,7 @@ sarima = model.ModelSarimax(df)
 # arima.set_validation_single_split(train_percent=0.75)
 sarima.set_validation_rolling_window(train_percent=0.975, test_len=7, start_date=config.DEV_START_DATE) #TODO: change date/remove it
 
-sarima.set_exogenous_vars(exog_cols=["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"])
+sarima.set_exogenous_cols(exog_cols=["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"])
 sarima.set_model_parameters(p=7, d=1, q=1, P=0, D=0, Q=2, m=7) #7,1,1, #TODO: add hyperparam grid
 
 sarima.model_run(pred_col=config.COLUMN)#, exog=["PAT_BG_0", "PAT_BG_A", "PAT_BG_AB", "PAT_BG_B"])
@@ -547,14 +548,14 @@ exog_cols = ["use_discarded", "use_expired", 'ward_AN', 'ward_CH', 'ward_I1', 'w
 m_lstm.set_validation_rolling_window(
     #TODO: store validation_sets as df: index + columns train start/train end/test start/test end
     #TODO: add option to choose days for train and test period.
-    train_percent=0.8,#9,#985,#975,
+    train_percent=0.85,#9,#985,#975,
     test_len=14, 
-    start_date="2021-01-01"
+    start_date="2022-01-01"
 )
 
 #%%
 m_lstm.set_model_parameters(
-    inner_window = 365*2, #365,#200,#365, #365*2 #365 to capture at least 1 year, #for training length
+    inner_window = 365, #365*2, #365,#200,#365, #365*2 #365 to capture at least 1 year, #for training length
 
     memory_cells=64,#64
     epochs=20,#20
@@ -594,7 +595,8 @@ grid_search_lstm_options = {
     "validation_type" : ["rolling"], #, "expanding"],
     "train_prct" : list(np.arange(0.6, 0.8, 0.1)), #wouldnt it make more sense to use int of days before to train? like train_days = 365*7 or 730 or something?
     "test_len" : [14],
-    "start_date" : [pd.to_datetime(day) for day in ["2008-01-01", "2012-01-01", "2016-01-01", "2020-01-01", "2024-01-01"]],
+    "start_date" : [pd.to_datetime(day) for day in ["2022-01-01", "2023-01-01", "2023-07-01", "2024-01-01", "2024-01-01"]],
+    # "start_date" : [pd.to_datetime(day) for day in ["2008-01-01", "2012-01-01", "2016-01-01", "2020-01-01", "2024-01-01"]],
     
     "memory_cell" : [32, 64, 128],
     "epochs" : [20, 100],
@@ -682,9 +684,9 @@ exog_cols = ["use_discarded", "use_expired", 'ward_AN', 'ward_CH', 'ward_I1', 'w
 m_prophet.set_validation_rolling_window(
     #TODO: store validation_sets as df: index + columns train start/train end/test start/test end
     #TODO: add option to choose days for train and test period.
-    train_percent=0.95,#9,#985,#975,
+    train_percent=0.7,#9,#985,#975,
     test_len=14, 
-    start_date="2024-01-01"
+    start_date="2023-01-01"
 )
 
 #%%
