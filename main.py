@@ -508,12 +508,12 @@ sarima = model.ModelSarimax(df)
 # arima.set_validation_expanding_window(train_percent=0.992, test_len=7, start_date="2022-01-01")
 # arima.set_validation_single_split(train_percent=0.75)
 sarima.set_validation_rolling_window(train_percent=0.975, test_len=7, start_date=config.DEV_START_DATE) #TODO: change date/remove it
-
+sarima.set_prediction_column("use_transfused")
 sarima.set_exogenous_cols(exog_cols=["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"])
 sarima.set_model_parameters(p=7, d=1, q=1, P=0, D=0, Q=2, m=7) #7,1,1, #TODO: add hyperparam grid
-
-sarima.model_run(pred_col=config.COLUMN)#, exog=["PAT_BG_0", "PAT_BG_A", "PAT_BG_AB", "PAT_BG_B"])
-
+#%%
+sarima.model_run()#, exog=["PAT_BG_0", "PAT_BG_A", "PAT_BG_AB", "PAT_BG_B"])
+#%%
 #Try out stepwise error measurements (now only mae):
 sarima.plot_stepwise(plot_type="forecast") #forecast
 sarima.plot_stepwise(df=sarima.stepwise_forecast_difference, comparison=False, plot_type="forecast difference") #forecast difference

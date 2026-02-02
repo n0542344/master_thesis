@@ -98,10 +98,8 @@ class Model:
         # RMSE -- Root mean squared error
         # RMSSE -- root mean squared scaled error
         # MaxError -- maximum error
-        self.stepwise_forecast_errors = pd.DataFrame()
+        self.stepwise_forecast_errors = pd.DataFrame() #TODO: rename like error_metrics
 
-        #Difference between stepwise forecast values to actual values
-        self.stepwise_forecast_difference = pd.DataFrame()
 
         #Dont think is needed:
         self.model_params = {
@@ -230,6 +228,8 @@ class Model:
         }
 
         self.make_validation_set()
+
+        self.stats["window_num"] = len(self.validation_sets)
 
 
 
@@ -450,7 +450,7 @@ class Model:
 
 
     @timer_func
-    def add_to_results(self):        
+    def add_to_results(self, preds):        
         #Add to existing self.predictions dictionary. self.predictions contains n keys of name "Day_"n_i where n=len(fc_days)
         # with the value of a dataframe with columns Actual, Mean, Lower, Upper and datetime index. 
         # Each dataframe gets expanded/filled in every window-iteration by the current (of the window) value of the day
@@ -508,7 +508,7 @@ class Model:
 
         self.forecast_errors = pd.DataFrame(columns=errors, index=forecast_steps)
 
-        self.forecast_errors = pd.DataFrame()
+        #self.forecast_errors = pd.DataFrame()
         for fc_day, df in self.predictions.items():
 
             y_pred = df["Mean"].dropna()
@@ -1118,7 +1118,7 @@ class ModelArima(Model):
 
 
     #composite function:
-    def model_run(self, print_fit_summary=True, last_only=True, days=None):
+    def model_run(self, print_fit_summary=True, last_summary_only=True):
         """Composite function that combines make_model, fit(), print_fit_summary(), predict(),
         add_stepwise_forecasts()
 
@@ -1136,17 +1136,15 @@ class ModelArima(Model):
 
         #TODO: Write docstring
         all_windows_start = time.time()
-        self.stats["windows_num"] = len(self.validation_sets)
 
         #Important!
-        self.models = []
+        self.models = [] #TODO: still necessary or delete?
 
         for i, window in enumerate(self.validation_sets):
             model = self.make_model(window)
             model_fit = self.fit(model)
 
-            if print_fit_summary:
-                self.print_fit_summary(model_fit)
+            self.print_fit_summary(model_fit, i, print_fit_summary, last_summary_only)
 
             preds = self.get_prediction_ARIMA(model_fit, window)
 
@@ -1192,12 +1190,13 @@ class ModelArima(Model):
     def add_to_results_ARIMA(self, pred_df, test_start):
         #TODO: this for now is only for ARIMA, but its refactoring of add_to_results from
         # Model class, but instead of OOP its Functional
+        #TODO: unify with add_to_results_SARIMAX?
 
         #Create self.predictions datafrmae, which is final result of this models run (
         #including all windows! contains each forecast days as separate df: Day_1:df, Day_2:df,
         # where each df contains datetime index, actual vlaue, forecast, lower, upper 
         # (and after all windows ran, also Difference is added between actual and pred)
-        #TODO: move this part to own function called by __init__!
+        #TODO: move this part to own function called by classes __init__!
         if not hasattr(self, "predictions") or self.predictions == None or type(self.predictions) == list:
             self.predictions = {}
             for fc_day in range(self.validation_config["test_len"]):
@@ -1208,7 +1207,7 @@ class ModelArima(Model):
 
                 self.predictions[day_label] = pd.DataFrame(
                     index=pd.date_range(start_date, end_date),
-                    columns=["Actual", "Mean", "Lower", "Upper"]
+                    columns=["Actual", "Mean", "Lower_CI", "Upper_CI"] #TODO: pass as self.XYZ
                 )
 
 
@@ -1223,9 +1222,13 @@ class ModelArima(Model):
             self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.model_params["prediction_column"]]
             # y_test_original_scale = self.scaler_y.inverse_transform(self.y_test) #old LSTM way: set this line above for-day range
             # self.predictions[day_label].loc[forecast_date, "Actual"] = y_test_original_scale[0, day]
-            self.predictions[day_label].loc[forecast_date, "Mean"] = np.mean(day_predictions, axis=None) #alternative: axis=0)[0]
-            self.predictions[day_label].loc[forecast_date, "Lower"] = np.percentile(day_predictions, 2.5, axis=None)
-            self.predictions[day_label].loc[forecast_date, "Upper"] = np.percentile(day_predictions, 97.5, axis=None)
+            # self.predictions[day_label].loc[forecast_date, "Mean"] = np.mean(day_predictions, axis=None) #alternative: axis=0)[0]
+            # self.predictions[day_label].loc[forecast_date, "Lower"] = np.percentile(day_predictions, 2.5, axis=None)
+            # self.predictions[day_label].loc[forecast_date, "Upper"] = np.percentile(day_predictions, 97.5, axis=None)
+            self.predictions[day_label].loc[forecast_date, "Mean"] = day_predictions["Prediction"]
+            self.predictions[day_label].loc[forecast_date, "Lower_CI"] = day_predictions["lower_ci"] #TODO: pass  Lower_CI (and lower_ci?) as self.XYZ
+            self.predictions[day_label].loc[forecast_date, "Upper_CI"] = day_predictions["upper_ci"] #TODO: pass  Upper_CI (and upper_ci?) as self.XYZ
+            
 
     def _get_day_predictions(self, day, pred_df, test_start):
         forecast_date = test_start + pd.Timedelta(days=day)
@@ -1271,9 +1274,13 @@ class ModelArima(Model):
         return model.fit()
 
 
-    def print_fit_summary(self, model_fit):
-        print(model_fit.summary())
-
+    def print_fit_summary(self, model_fit, iteration, print_fit_summary, last_summary_only=True):
+        if print_fit_summary:
+            if last_summary_only: 
+                if iteration == len(self.validation_sets):
+                    print(model_fit.summary())
+            else:
+                print(model_fit.summary())
 
     #Not in use, as far as i can see
     # @timer_func
@@ -1304,6 +1311,7 @@ class ModelArima(Model):
     @timer_func
     def get_prediction_ARIMA(self, model_fit, window):
 
+        #TODO: move to separate function OR init!
         if self.alpha == None:
             alpha = 0.05
         elif self.alpha != None:
@@ -1315,14 +1323,14 @@ class ModelArima(Model):
 
         #iterate over both model_fits and validation_sets:
         preds = (model_fit
-                       .get_prediction(start=test_start, end=test_end, dynamic=True)
-                       .summary_frame(alpha=alpha)
-                       .rename(columns={
-                           "mean":"Prediction",
-                           "mean_ci_lower": "lower_ci",
-                           "mean_ci_upper": "upper_ci"
-                           }
-                        )
+                .get_prediction(start=test_start, end=test_end, dynamic=True)
+                .summary_frame(alpha=alpha)
+                .rename(columns={
+                    "mean":"Prediction",
+                    "mean_ci_lower": "lower_ci",
+                    "mean_ci_upper": "upper_ci"
+                    }
+                )
         )
 
         return preds
@@ -1356,33 +1364,36 @@ class ModelSarimax(Model):
     def __init__(self, data): #TODO: maybe add config, but more sense in base class imo
         super().__init__(data)
         #ARIMA part:
-        self.p = None
-        self.q = None
-        self.d = None
-        #Seasonal part:
-        self.P = None
-        self.Q = None
-        self.D = None
-        self.m = None
-        #eXogenous part:
-        #self.exog_cols = None
+        self.model_params = {
+            "p" : None,
+            "d" : None,
+            "q" : None,
+            #Seasonal part:
+            "P" : None,
+            "Q" : None,
+            "D" : None,
+            "m" : None
+            #eXogenous part:
+            #self.exog_cols = None
+        }
+
+
 
     #------------------------------------------------------------------------------------------------
     # MARK: Setters
     #------------------------------------------------------------------------------------------------
 
-    def set_model_parameters(
-            self, p: int=1, d: int=1, q: int=1,
-            P: int=1, D: int=1, Q: int=1, m: int=7):
+    def set_model_parameters(self, p: int=1, d: int=1, q: int=1, P: int=1, D: int=1, Q: int=1, m: int=7):
 
-        self.p = p
-        self.d = d
-        self.q = q
+        self.model_params["p"] = p
+        self.model_params["d"] = d
+        self.model_params["q"] = q
 
-        self.P = P
-        self.D = D
-        self.Q = Q
-        self.m = m
+        self.model_params["P"] = P
+        self.model_params["D"] = D
+        self.model_params["Q"] = Q
+
+        self.model_params["m"] = m
 
 
     # def set_exogenous_vars(self, exog_cols: list):
@@ -1413,7 +1424,7 @@ class ModelSarimax(Model):
 
 
     #composite function:
-    def model_run(self, pred_col: str="count", print_fit_summary=True, last_only=True, days=None): #exog: list=None,
+    def model_run(self, print_fit_summary=True, last_summary_only=True):
         """Composite function that combines make_model, fit(), print_fit_summary(), predict(),
         add_stepwise_forecasts()
 
@@ -1430,85 +1441,116 @@ class ModelSarimax(Model):
             Defaults to None, which will then use abovementioned value.
         """
 
-        self.make_model(pred_col=pred_col)
-        self.fit()
-        if print_fit_summary:
-            self.print_fit_summary(last_only=last_only)
-        self.get_prediction(days=days)
+        self.create_result_dir()
 
-        #Get stepwise values:
-        self.add_stepwise_forecasts()
-        self.add_stepwise_errors(col_pred=pred_col)
+        #TODO: Write docstring
+        all_windows_start = time.time()
+
+        for i, window in enumerate(self.validation_sets):
+
+            model = self.make_model(window)
+            model_fit = self.fit(model)
+        
+            self.print_fit_summary(model_fit, i, print_fit_summary, last_summary_only)
+        
+            preds = self.predict(model_fit, window)
+
+            self.add_to_results_SARIMAX(preds, test_start=window[2])
+
         self.add_stepwise_difference()#col_pred=pred_col)
+        self.get_stepwise_errors() #TODO: check 'add_stepwise_errors()', i think can be deleted!
 
 
-
-    def make_model(self, pred_col: str):
+    @timer_func
+    def make_model(self, window):
         """
         create model with trainign data + (hyper)parameters
 
         Parameters
         ----------
-        pred_col : string
-            columns (target) to use for for univariate forecasting
+        window: Set of datetime training start/end date; test start/end date (length of 4)
         """
         #Important!
-        self.models = []
+        # self.models = []
 
         #TODO: set up split AND validation
         # i think for validation, best option to have a list of lists with train_start, train_end, test_start, test_end
         # days (datetime), which i can cycle here (make_model, fit, print_fit_summary, predict), which is just
         # inplace filtering of df, so i dont have to store multiple dfs!
-        series = self.data[pred_col]
+        # series = self.data[pred_col]
         #TODO: !use SARIMAX instead of ARIMA!
 
 
         if self.model_params["exog_cols"]  == None:
-            for train_set in self.validation_sets:
-                self.models.append(SARIMAX(
-                    endog=series[train_set[0] : train_set[1]],
-                    order=(self.p, self.d, self.q),
-                    seasonal_order=(self.P, self.D, self.Q, self.m)))
+            model = SARIMAX(
+                endog=self.data.loc[window[0] : window[1], self.model_params["prediction_column"]],
+                order=(self.model_params["p"], 
+                        self.model_params["d"],
+                        self.model_params["q"]
+                ),
+                seasonal_order=(
+                    self.model_params["P"], 
+                    self.model_params["D"],
+                    self.model_params["Q"],
+                    self.model_params["m"]
+                )
+            )
+            # for train_set in self.validation_sets:
+            #     self.models.append(SARIMAX(
+            #         endog=series[train_set[0] : train_set[1]],
+            #         order=(self.p, self.d, self.q),
+            #         seasonal_order=(self.P, self.D, self.Q, self.m)))
 
         elif self.model_params["exog_cols"] != None:
             # exogenous = self.data[exog]
-            for train_set in self.validation_sets:
-                self.models.append(SARIMAX(
-                    endog=series[train_set[0] : train_set[1]],
-                    exog=self.data.loc[train_set[0]:train_set[1], self.model_params["exog_cols"]],
-                    # exog=exogenous[train_set[0] : train_set[1]],
-                    order=(self.p, self.d, self.q),
-                    seasonal_order=(self.P, self.D, self.Q, self.m)))
+            model = SARIMAX(
+                endog=self.data.loc[window[0] : window[1], self.model_params["prediction_column"]],
+                exog=self.data.loc[window[0] : window[1], self.model_params["exog_cols"]],
+                order=(self.model_params["p"], 
+                        self.model_params["d"],
+                        self.model_params["q"]
+                ),
+                seasonal_order=(
+                    self.model_params["P"], 
+                    self.model_params["D"],
+                    self.model_params["Q"],
+                    self.model_params["m"]
+                )
+            )
+            # for train_set in self.validation_sets:
+            #     self.models.append(SARIMAX(
+            #         endog=series[train_set[0] : train_set[1]],
+            #         exog=self.data.loc[train_set[0]:train_set[1], self.model_params["exog_cols"]],
+            #         # exog=exogenous[train_set[0] : train_set[1]],
+            #         order=(self.p, self.d, self.q),
+            #         seasonal_order=(self.P, self.D, self.Q, self.m)))
+
+        return model
+
+    @timer_func
+    def fit(self, model):
+        return model.fit()
 
 
+    #NOTE: seems to be out of use
+    # def predict(self, days=None):
+    #     """Predict x days ahead, where x == 'days'
 
-    def fit(self):
-        #Important!
-        self.model_fits = []
+    #     Args:
+    #         days (_type_, optional): Days to predict ahead. Defaults to None, then
+    #         days will be loaded from validation_config["test_len"].
+    #     """
+    #     # generate forecast for x days ahead
+    #     # (see base class)
 
-        for model in self.models:
-            self.model_fits.append(model.fit())
+    #     #Important!
+    #     self.predictions = []
 
+    #     if days == None:
+    #         days = self.validation_config["test_len"]
 
-
-    def predict(self, days=None):
-        """Predict x days ahead, where x == 'days'
-
-        Args:
-            days (_type_, optional): Days to predict ahead. Defaults to None, then
-            days will be loaded from validation_config["test_len"].
-        """
-        # generate forecast for x days ahead
-        # (see base class)
-
-        #Important!
-        self.predictions = []
-
-        if days == None:
-            days = self.validation_config["test_len"]
-
-        for fit in self.model_fits:
-            self.predictions.append(fit.get_forecast(steps=days))
+    #     for fit in self.model_fits:
+    #         self.predictions.append(fit.get_forecast(steps=days))
 
 
 
@@ -1516,45 +1558,118 @@ class ModelSarimax(Model):
     # MARK: Getters/Print
     #------------------------------------------------------------------------------------------------
 
+    @timer_func
+    def predict(self, model_fit, window):
+        #NOTE: renamed from get_prediction() to predict(), because get_prediction() is a member fct of SARIMAX class. 
 
-    def get_prediction(self, days=None, alpha: int=None):
-
+        #TODO: move to separate function OR init!
         if self.alpha == None:
             alpha = 0.05
         elif self.alpha != None:
             alpha = self.alpha
 
-        self.predictions = []
+        # self.predictions = []
 
-        #iterate over both model_fits and validation_sets:
-        for fit, validation_set in zip(self.model_fits, self.validation_sets): #'fit' is the fitted model
-            test_start = validation_set[2]
-            test_end = validation_set[3]
+        test_start = window[2]
+        test_end = window[3]
 
-            exog_prediction = self.data.loc[test_start:test_end, self.model_params["exog_cols"]]
+        exog_prediction = self.data.loc[test_start:test_end, self.model_params["exog_cols"]]
 
-            self.predictions.append(fit
-                .get_prediction(start=test_start, end=test_end, exog=exog_prediction, dynamic=True)
+        preds = (model_fit
+                .get_prediction(
+                    start=test_start, 
+                    end=test_end, 
+                    exog=exog_prediction,
+                    dynamic=True)
                 .summary_frame(alpha=alpha)
-                .rename(columns={"mean":"Prediction"})
-            )
+                .rename(columns={
+                    "mean":"Prediction",
+                    "mean_ci_lower": "lower_ci",
+                    "mean_ci_upper": "upper_ci"
+                    }
+                )
+        )
+        # #iterate over both model_fits and validation_sets:
+        # for fit, validation_set in zip(self.model_fits, self.validation_sets): #'fit' is the fitted model
+        #     test_start = validation_set[2]
+        #     test_end = validation_set[3]
+
+        #     exog_prediction = self.data.loc[test_start:test_end, self.model_params["exog_cols"]]
+
+        #     self.predictions.append(fit
+        #         .get_prediction(start=test_start, end=test_end, exog=exog_prediction, dynamic=True)
+        #         .summary_frame(alpha=alpha)
+        #         .rename(columns={"mean":"Prediction"})
+        #     )
+        return preds
+
+
+    @timer_func
+    def add_to_results_SARIMAX(self, pred_df, test_start):
+        #TODO: this for now is only for ARIMA, but its refactoring of add_to_results from
+        #Specific for each Model (arima/sarimax are same though).
+
+        # Model class, but instead of OOP its Functional
+
+        #Create self.predictions datafrmae, which is final result of this models run (
+        #including all windows! contains each forecast days as separate df: Day_1:df, Day_2:df,
+        # where each df contains datetime index, actual vlaue, forecast, lower, upper 
+        # (and after all windows ran, also Difference is added between actual and pred)
+        #TODO: move this part to own function called by classes __init__!
+        if not hasattr(self, "predictions") or self.predictions == None or type(self.predictions) == list:
+            self.predictions = {}
+            for fc_day in range(self.validation_config["test_len"]):
+                day_label = f"Day_{fc_day + 1}"
+
+                start_date = self.validation_sets[0][2]
+                end_date = self.validation_sets[-1][2] + pd.Timedelta(days=fc_day)
+
+                self.predictions[day_label] = pd.DataFrame(
+                    index=pd.date_range(start_date, end_date),
+                    columns=["Actual", "Mean", "Lower_CI", "Upper_CI"]
+                )
+
+        #TODO: i think could be made different. either fill by row (not every single cell value) or store all results and in the end merge somehow?
+        #fill the dataframes
+        for day in range(self.validation_config["test_len"]):
+            day_label = f"Day_{day + 1}"
+            forecast_date = test_start + pd.Timedelta(days=day)
+
+            day_predictions = self._get_day_predictions(day, pred_df, test_start=test_start) #TODO: needs rework if refactoring to functional
+            # day_predictions = self.all_predictions[:, 0, day] #shape of (np_iterations, 1, forecast_days)
+
+            self.predictions[day_label].loc[forecast_date, "Actual"] = self.data.loc[forecast_date, self.model_params["prediction_column"]]
+            # y_test_original_scale = self.scaler_y.inverse_transform(self.y_test) #old LSTM way: set this line above for-day range
+            # self.predictions[day_label].loc[forecast_date, "Actual"] = y_test_original_scale[0, day]
+            #TODO: this is different for SARIMAX/ARIMA and LSTM and Prophet
+            self.predictions[day_label].loc[forecast_date, "Mean"] = day_predictions["Prediction"]
+            self.predictions[day_label].loc[forecast_date, "Lower_CI"] = day_predictions["lower_ci"]
+            self.predictions[day_label].loc[forecast_date, "Upper_CI"] = day_predictions["upper_ci"]
+            
+
+
+    def _get_day_predictions(self, day, pred_df, test_start):
+        forecast_date = test_start + pd.Timedelta(days=day)
+
+        return pred_df.loc[forecast_date]
 
 
 
-    def print_fit_summary(self, last_only=True):
-        if last_only:
-            print(self.model_fits[-1].summary())
-        else:
-            for fit in self.model_fits:
-                print(fit.summary())
 
+
+    def print_fit_summary(self, model_fit, iteration, print_fit_summary, last_summary_only=True):
+        #TODO: move to Model base class
+        #could use keywords like ("all", "last_only") as parameters for simpler & more consistent logic
+        if print_fit_summary:
+            if last_summary_only: 
+                if iteration == len(self.validation_sets):
+                    print(model_fit.summary())
+            else:
+                print(model_fit.summary())
 
 
     def print_params(self):
         print(f"p,d,q: {self.p}, {self.d}, {self.q}\nP,D,Q,m: {self.P},{self.D},{self.Q}{self.m}\nExogenous columns: {self.exog_cols}")
-
-
-
 
 
 
