@@ -290,7 +290,7 @@ class Model:
 
 
 
-    def set_exogenous_cols(self, exog_cols: list):
+    def set_exogenous_cols(self, exog_cols: list, **kwargs):
         """Set columns to use for exogenous variables with LSTM. 
         Sets member variables' "param" (dict) key "exog_cols" to value of input parameter.
 
@@ -894,14 +894,14 @@ class ModelComparison(Model):
         self.forecast_window = days
 
 
-    def set_column(self, col=config.COLUMN):
+    def set_column(self, col=config.PRED_COLUMN):
         """Sets column of interest, used in all comparison models. I want to set it in a single place for
         coherence reasons. if special column needed, you can just use a single 'run_' funciton. also, later i can
         still see the column that was used.
 
         Args:
             col (str, optional): Column name to use as base for naive.
-               Defaults to config.COLUMN, which is a variable name used in main.py for column of interest.
+               Defaults to config.PRED_COLUMN, which is a variable name used in main.py for column of interest.
         """
 
         self.col = col
@@ -919,7 +919,7 @@ class ModelComparison(Model):
 
         self.single_value = single_val
 
-    def set_dates_mean(self, start_date: str=None, end_date: str=None, col=config.COLUMN):
+    def set_dates_mean(self, start_date: str=None, end_date: str=None, col=config.PRED_COLUMN):
         """Set start and end dates for run_mean(). If not set, defaults to min/max indices of self.data
 
         Args:
@@ -988,7 +988,7 @@ class ModelComparison(Model):
 
         """
         #initiate 'result'
-        self.predictions = self.data[[config.COLUMN]]
+        self.predictions = self.data[[config.PRED_COLUMN]]
 
         #Run all comparison models
         self.predictions["single_value"] = self.run_single_value(single_value=self.single_value, model_run=True)
@@ -1014,7 +1014,7 @@ class ModelComparison(Model):
 
 
 
-    def run_naive(self, col=config.COLUMN, model_run=False):
+    def run_naive(self, col=config.PRED_COLUMN, model_run=False):
         """Creates Naive (also called Persistance/persistent) forecast. that is to just take the last
         value available value to forecast for the next one. So if i know todays value X, then i say tomorrow its also x.
         Since we work with train/test data, i dont need to implement rolling/expanding window to calulcate this, it wouldnt
@@ -1022,7 +1022,7 @@ class ModelComparison(Model):
 
         Args:
             col (str, optional): Column name to use as base for naive.
-               Defaults to config.COLUMN, which is a variable name used in main.py for column of interest.
+               Defaults to config.PRED_COLUMN, which is a variable name used in main.py for column of interest.
             model_run (bool): If true, then function is ran inside of self.model_run(), so it
             returns the new column.
 
@@ -1037,7 +1037,7 @@ class ModelComparison(Model):
 
 
 
-    def run_mean(self, start_date: str=None, end_date: str=None, col=config.COLUMN, model_run=False):
+    def run_mean(self, start_date: str=None, end_date: str=None, col=config.PRED_COLUMN, model_run=False):
         """Calculate the mean of historical data and use that as comparison.
         This would probably slightly profit from using rolling window, to only use more proximate data.
         But for simplicity reasons, i dont implement this.
@@ -1048,7 +1048,7 @@ class ModelComparison(Model):
             start_date (str, optional): Type start date for mean calculation as "YYYY-MM-DD". Defaults to min date of 'col'.
             end_date (str, optional): Type start date for mean calculation as "YYYY-MM-DD". Defaults to min date of 'col'.
             col (str, optional): Column name to use as base for naive.
-                Defaults to config.COLUMN, which is a variable name used in main.py for column of interest.
+                Defaults to config.PRED_COLUMN, which is a variable name used in main.py for column of interest.
             model_run (bool): If true, then function is ran inside of self.model_run(), so it
             returns the new column.
 
@@ -1069,13 +1069,13 @@ class ModelComparison(Model):
             return self.data["pred_mean"]
 
 
-    def run_seasonal_naive(self, col=config.COLUMN, n=7, model_run=False):
+    def run_seasonal_naive(self, col=config.PRED_COLUMN, n=7, model_run=False):
         """Basically the same as naive (run_naive member function), but instead of taking the last value, take n-x values before.
         Since we have weekly seasonality, always take value from 7 days ago, so for monday, take last mondays value etc.
 
         Args:
             col (str, optional): Column name to use as base for naive.
-                Defaults to config.COLUMN, which is a variable name used in main.py for column of interest.
+                Defaults to config.PRED_COLUMN, which is a variable name used in main.py for column of interest.
             n (int, optional): How many rows/days before to use. For us it should be one week ago (7 days). Defaults to 7.
             model_run (bool): If true, then function is ran inside of self.model_run(), so it
             returns the new column.
@@ -1125,7 +1125,7 @@ class ModelArima(Model):
 
 
     #composite function:
-    def model_run(self, print_fit_summary=False, last_summary_only=False, **kwargs):
+    def model_run(self, print_fit_summary=False, last_summary_only=False):
         """Composite function that combines make_model, fit(), print_fit_summary(), predict(),
         add_stepwise_forecasts()
 
@@ -1158,11 +1158,12 @@ class ModelArima(Model):
             window_end = time.time()
             #print(f"Window {i} executed in {window_end - window_start}s\n")
 
-        print(f"\nTotal time for all windows {window_end - all_windows_start}s")
-
         self.add_stepwise_difference()
         self.get_stepwise_errors()
-        self.stats["total_duration"] = round(window_end - all_windows_start, ndigits=2) #TODO: move to setter?
+
+        print(f"\nTotal time for all windows {window_end - all_windows_start}s")
+        self.stats["run_duration"] = round(window_end - all_windows_start, ndigits=2) #TODO: move to setter?
+
         self.save_results()
 
         return self.forecast_errors.loc[["Day_1"]].assign(id=self.stats["id"])
@@ -1323,7 +1324,7 @@ class ModelSarimax(Model):
     class_name = "Arima"
 
 
-    def __init__(self, data): #TODO: maybe add config, but more sense in base class imo
+    def __init__(self, data, id=None): #TODO: maybe add config, but more sense in base class imo
         super().__init__(data)
         #ARIMA part:
         self.model_params = {
@@ -1338,6 +1339,8 @@ class ModelSarimax(Model):
             #eXogenous part:
             #self.exog_cols = None
         }
+        self.stats["model_name"] = "Sarimax"
+        self.stats["id"] = id
 
 
 
@@ -1345,7 +1348,7 @@ class ModelSarimax(Model):
     # MARK: Setters
     #------------------------------------------------------------------------------------------------
 
-    def set_model_parameters(self, p: int=1, d: int=1, q: int=1, P: int=1, D: int=1, Q: int=1, m: int=7):
+    def set_model_parameters(self, p: int=1, d: int=1, q: int=1, P: int=1, D: int=1, Q: int=1, m: int=7, **kwargs):
 
         self.model_params["p"] = p
         self.model_params["d"] = d
@@ -1419,9 +1422,17 @@ class ModelSarimax(Model):
 
             self.add_to_results_SARIMAX(preds, test_start=window[2])
 
+
         self.add_stepwise_difference()#col_pred=pred_col)
         self.get_stepwise_errors() #TODO: check 'add_stepwise_errors()', i think can be deleted!
 
+        all_windows_end = time.time()
+        print(f"\nTotal time for all windows {all_windows_end - all_windows_start}s")
+        self.stats["run_duration"] = all_windows_end - all_windows_start #TODO: move to setter?
+
+        self.save_results()
+
+        return self.forecast_errors.loc[["Day_1"]].assign(id=self.stats["id"])
 
     @timer_func
     def make_model(self, window):
@@ -1645,7 +1656,7 @@ class ModelSarimax(Model):
 
 class ModelLSTM(Model):
 
-    def __init__(self, data): #TODO: maybe add config, but more sense in base class imo
+    def __init__(self, data, id=None): #TODO: maybe add config, but more sense in base class imo
         super().__init__(data)
 
         #LSTM-specific variable inits
@@ -1670,6 +1681,8 @@ class ModelLSTM(Model):
             "upper_limit" : None,
             "exog_cols" : None
         } 
+        self.stats["model_name"] = "LSTM"
+        self.stats["id"] = id
 
 
 
@@ -1694,7 +1707,8 @@ class ModelLSTM(Model):
             loss: str="mae",
             activation_fct: str="relu",
             lower_limit: float=2.5,
-            upper_limit: float=97.5
+            upper_limit: float=97.5,
+            **kwargs
             ):
         
         self.model_params["inner_window"] = inner_window
@@ -1744,7 +1758,7 @@ class ModelLSTM(Model):
         self.create_result_dir()
 
         all_windows_start = time.time()
-        
+
         #initialize model for first time (needs X_train for shape, so need to run other fcts once)
         self.get_start_end_days(self.validation_sets[0])
         self.get_data()
@@ -1778,12 +1792,16 @@ class ModelLSTM(Model):
             window_end = time.time()
             # print(f"Window {i} executed in {window_end - window_start}s\n")
 
-        print(f"\nTotal time for all windows {window_end - all_windows_start}s")
 
         self.add_stepwise_difference()
         self.get_stepwise_errors()
-        self.stats["total_duration"] = window_end - all_windows_start #TODO: move to setter?
+
+        print(f"\nTotal time for all windows {window_end - all_windows_start}s")
+        self.stats["run_duration"] = window_end - all_windows_start #TODO: move to setter?
+
         self.save_results()
+
+        return self.forecast_errors.loc[["Day_1"]].assign(id=self.stats["id"])
 
 
 
@@ -1978,7 +1996,7 @@ class ModelLSTM(Model):
 
 #xXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 class ModelProphet(Model):
-    def __init__(self, data): #TODO: maybe add config, but more sense in base class imo
+    def __init__(self, data, id=None): #TODO: maybe add config, but more sense in base class imo
         super().__init__(data)
         #prophet-specific variable inits
         self.model = None
@@ -1990,6 +2008,8 @@ class ModelProphet(Model):
             "lower_limit" : None,
             "upper_limit" : None
         } #rename; prob better in base class.
+        self.stats["model_name"] = "Prophet"
+        self.stats["id"] = id
 
 
     def model_run(self):
@@ -2019,20 +2039,23 @@ class ModelProphet(Model):
             
             # print(f"Window {i} executed in {window_end - window_start}s\n")
 
-        all_windows_end = time.time()
-        self.stats["run_duration"] = all_windows_end - all_windows_start #TODO: move to setter?
-        print(f"\nTotal time for all windows {all_windows_end - all_windows_start}s")
         #TODO: make functions:
         self.add_stepwise_difference()
         self.get_stepwise_errors()
+
+        all_windows_end = time.time()
+        self.stats["run_duration"] = all_windows_end - all_windows_start #TODO: move to setter?
+        print(f"\nTotal time for all windows {all_windows_end - all_windows_start}s")
+
         self.save_results()
   
+        return self.forecast_errors.loc[["Day_1"]].assign(id=self.stats["id"])
 
 
 
 
 
-    def set_model_parameters(self, lower_limit: float=2.5, upper_limit: float=97.5):
+    def set_model_parameters(self, lower_limit: float=2.5, upper_limit: float=97.5, **kwargs):
 
         self.model_params["lower_limit"] = lower_limit
         self.model_params["upper_limit"] = upper_limit
@@ -2070,7 +2093,11 @@ class ModelProphet(Model):
 
 
     def fit_model(self):
-        self.model.fit(self.prophet_train) #rename? But X_train doesnt really make sense imo
+        self.model.fit(
+            self.prophet_train
+            .reset_index()
+            .rename(columns={"date":"ds", config.PRED_COLUMN:"y"})
+         ) #rename? But X_train doesnt really make sense imo
 
 
 

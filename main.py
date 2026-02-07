@@ -9,6 +9,8 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 import os
 
+
+
 from src import clean
 from src import config
 from src import data_model
@@ -17,7 +19,13 @@ from src import model
 from src import transform
 from src import viz
 
-import uuid
+
+from itertools import product
+from sklearn.model_selection import ParameterGrid
+import multiprocessing
+import traceback
+import gc
+
 
 
 #For developing purposes:
@@ -597,157 +605,35 @@ m_lstm.model_run()
 
 
 
-#%%
-#Try gridsearch:
-
-from itertools import product
-import numpy as np
-import pandas as pd
-
-#TODO: grid search options/possiblilites rough idea:
-grid_search_lstm_options = {
-    "validation_type" : ["rolling"], #, "expanding"],
-    "train_prct" : [0.7, 0.8], #list(np.arange(0.6, 0.8, 0.1)), #wouldnt it make more sense to use int of days before to train? like train_days = 365*7 or 730 or something?
-    "test_len" : [7, 14],
-    "start_date" : [pd.to_datetime(day) for day in ["2015-01-01", "2022-01-01", "2024-01-01"]],
-    # "start_date" : [pd.to_datetime(day) for day in ["2008-01-01", "2012-01-01", "2016-01-01", "2020-01-01", "2024-01-01"]],
-    
-    "memory_cell" : [32, 64, 128],
-    "epochs" : [20, 100],
-    "batch_size" : [32],
-    "pi_iterations" : [100, 1000],
-    "optimizer" : ["adam"],
-    "loss" : ["mean_squared_error", "mean_absolute_error", "mean_squared_logarithmic_error"] #see description here:https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/
-    #"exog_cols" : exog_cols #this would need to be 0-all of them? or just 0 + all?
-}
-#%%
-search_grid = list(product(*grid_search_lstm_options.values()))
-print(len(search_grid))
-#fill dict with lists values:
-for i, grid in enumerate(search_grid[0:10]):
-    search_grid_dict = dict(zip(grid_search_lstm_options.keys(), grid))
-    print(search_grid_dict)
-#%%
-#MARK: TEST GRID SEARCH 
-#IMPLEMENTATION TEST FOR SARIMAX + PARALLELIZATION:
-sarima.set_validation_rolling_window(train_percent=0.8, test_len=14, start_date=config.DEV_START_DATE) #TODO: change date/remove it
-sarima.set_prediction_column("use_transfused")
-sarima.set_exogenous_cols(exog_cols=["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"])
-
-#TODO: grid search options/possiblilites rough idea:
-grid_search_lstm_options = {
-    "train_percent" : list(np.arange(0.5, 0.9, 0.1)),
-    "p" : list(range(0,9)),
-    "d" : list(range(0,9)),
-    "q" : list(range(0,9)),
-    "P" : list(range(0,9)),
-    "d" : list(range(0,9)),
-    "q" : list(range(0,9)),
-    "q" : list(range(0,15)),
-}
-["use_discarded", "use_expired", 'ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC', "workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year", "tlmin", "tlmax"]
-
-#%% 
-# Test with arima, is the fastest.
-from sklearn.model_selection import ParameterGrid
-from itertools import combinations
-
-exog_types = {
-    "uses" : ["use_discarded", "use_expired"],
-    "wards" : ['ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC'],
-    "days" : ["workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year"],
-    "weather" : ["tlmin", "tlmax"]
-}
-
-keys = list(exog_types.keys())
-all_combinations = []
-for k in range(1, len(keys) + 1):
-    combos = list(combinations(keys, k))
-    all_combinations.extend(combos)
-    
-print(all_combinations)
-print(len(all_combinations))
-
-def get_all_lists_combinations(input_dict):
-    all_combinations_list = []
-    for combo in all_combinations:
-        print(combo)
-        merge = []
-        for v in combo:
-            merge.extend(input_dict.get(v))
-        all_combinations_list.append(merge)
-
-    return all_combinations_list
-
-test_list = get_all_lists_combinations(exog_types)
-
-#Gets all combinations of lists (as value dict), returning list of tubles, where index 0 is list of keys and index 1 is one combined list of values
-def get_combinations_with_keys(input_dict):
-    for k in range(1, len(keys) + 1):
-        combos = list(combinations(keys, k))
-        all_combinations.extend(combos)
-
-    combos_list_of_tuples = []
-    for combo in all_combinations:
-        merge = []
-        for v in combo:
-            merge.extend(input_dict.get(v))
-        combos_list_of_tuples.append((list(combo), merge))
-
-    return combos_list_of_tuples
-
-test_tuples = get_combinations_with_keys(exog_types)
-#%%
-arima_gs_config = {
-    "prediction_column" : [config.COLUMN],
-    
-    "exog_cols" : [list[1] for list in test_tuples[:5]],
-    
-    "train_percent" : np.arange(0.6, 0.8, 0.1),
-    "test_len" : [14],
-    "start_date" : [pd.to_datetime(day) for day in ["2015-01-01", "2022-01-01", "2024-01-01"]],
-
-    "p" : list(range(0,7)),
-    "d" : list(range(0,3)),
-    "q" : list(range(0,7))
-    }
-# arima_gs_config = {
-#     "exog_cols" : [list[1] for list in test_tuples],
-#     "prediction_col" : [config.COLUMN],
-#     "train_percent" : np.arange(0.6, 0.8, 0.1),
-#     "start_date" : [pd.to_datetime(day) for day in ["2015-01-01", "2022-01-01", "2024-01-01"]],
-#     "p" : list(range(0,9)),
-#     "d" : list(range(0,9)),
-#     "q" : list(range(0,9))
-#     }
+#%% MARK: GridSearch:
 
 
-arima_grid = list(ParameterGrid(arima_gs_config))
-
-for i, grid in enumerate(arima_grid):
-    grid["id"] = i+1
 
 #%%
-import multiprocessing
-import traceback
+
 importlib.reload(model)
 importlib.reload(config)
 
 
 
-
+#TODO: move to utils.py?
 def run_worker(args):
+    gc.collect()
+    gc.collect()
+
     ModelClass, params = args
     job_id = params.get("id")
 
     try:
         model_instance = ModelClass(df, id=job_id)
         model_instance.set_prediction_column(**params)
+        if ModelClass.__name__ != "ModelArima":
+            model_instance.set_exogenous_cols(**params)
         model_instance.set_validation_rolling_window(**params)
         model_instance.set_model_parameters(**params) 
         
         run_results = model_instance.model_run()
-        print(f"Job {job_id} finished in {model_instance.stats['total_duration']}")
+        print(f"Job {job_id} finished in {model_instance.stats['run_duration']}")
 
         return (job_id, True, ModelClass.__name__, run_results)
     
@@ -763,35 +649,119 @@ def run_worker(args):
                 "RMSE" : None, 
                 "MaxError" : None,
                 "id" : job_id},
-            index="Day_1"
+            index=["Day_1"]
         )
         traceback.print_exc()
         return (job_id, False, ModelClass.__name__, empty_df) 
 
-global_job_id = 1
-all_jobs = []
-
-for grid in arima_grid:
-    grid["global_id"] = global_job_id
-    all_jobs.append( (model.ModelArima, grid) )
-    global_job_id += 1
 
 
-#%%
+global_job_id = 1 #TODO: maybe move to top?
+all_jobs = [] #TODO: maybe move to top?
+
+#TODO: probably better in utils.py?
+def add_model_grid_to_all_jobs(grid, model):
+    #grid is a df, model a specific modle class, like model.ModelArima
+    global all_jobs
+    global global_job_id
+    for g in grid:
+        g["id"] = global_job_id
+        all_jobs.append( (model, g) )
+        global_job_id += 1
+
+
+# from pmdarima import auto_arima
+# autoarima_res = auto_arima(y=df[config.PRED_COLUMN], seasonal=True, m=7, trace=True)
+
+
+importlib.reload(config)
+
+grid_arima = list(ParameterGrid(config.gs_config_arima))
+grid_sarimax = list(ParameterGrid(config.gs_config_sarimax))
+grid_lstm = list(ParameterGrid(config.gs_config_lstm))
+grid_prophet = list(ParameterGrid(config.gs_config_prophet))
+
+
+
+
+add_model_grid_to_all_jobs(grid_arima, model.ModelArima)
+add_model_grid_to_all_jobs(grid_sarimax, model.ModelSarimax)
+add_model_grid_to_all_jobs(grid_lstm, model.ModelLSTM)
+add_model_grid_to_all_jobs(grid_prophet, model.ModelProphet)
+
+
 cores = max(1, multiprocessing.cpu_count() - 2)
 
+#%%
+
+with multiprocessing.Pool(cores) as pool:
+    result_list_arima = pool.map(run_worker, [job for job in all_jobs[0:5]]) #For testing only a few
+
+valid_results_arima = [res[3] for res in result_list_arima if res is not None]
+final_result_df_arima = pd.concat(valid_results_arima).set_index("id")
+final_result_df_arima.to_csv("./results/Arima/grid_search_results.csv")
+print("Done with arima")
+
+with multiprocessing.Pool(cores) as pool:
+    result_list_sarimax = pool.map(run_worker, [job for job in all_jobs[1323:1323+5]]) #all_jobs[0:8])
+
+valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
+final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
+final_result_df_sarimax.to_csv("./results/Sarimax/grid_search_results.csv")
+print("Done with sarimax")
 
 
 with multiprocessing.Pool(cores) as pool:
-    result_list = pool.map(run_worker, all_jobs[0:8])
+    result_list_lstm = pool.map(run_worker, [job for job in all_jobs[5644:5644+5]]) #all_jobs[0:8])
+
+valid_results_lstm = [res[3] for res in result_list_lstm if res is not None]
+final_result_df_lstm = pd.concat(valid_results_lstm).set_index("id")
+final_result_df_lstm.to_csv("./results/LSTM/grid_search_results.csv")
+print("Done with lstm")
+
+
+with multiprocessing.Pool(cores) as pool:
+    result_list_prophet = pool.map(run_worker, [job for job in all_jobs[6480:6480+5]]) #all_jobs[0:8])
+
+valid_results_prophet = [res[3] for res in result_list_prophet if res is not None]
+final_result_df_prophet = pd.concat(valid_results_prophet).set_index("id")
+final_result_df_prophet.to_csv("./results/Prophet/grid_search_results.csv")
+print("Done with prophet")
+
+print(__name__)
+
+print("done")
 
 
 #%%
-valid_results = [res[3] for res in result_list if res is not None]
-final_result_df = pd.concat(valid_results).set_index("id")
-final_result_df.to_csv("./results/Arima/grid_search_results.csv")
+m_prophet = model.ModelProphet(df)
+m_prophet.set_validation_rolling_window(**test_worker[1])
+m_prophet.set_model_parameters(**test_worker[1])
+m_prophet.set_exogenous_cols(**test_worker[1])
+m_prophet.set_prediction_column(**test_worker[1])
+m_prophet.model_run()
 
-print("done")
+
+#%%Try with gs_config:
+
+test_worker = all_jobs[0] #arima
+test_worker = all_jobs[1323] #Sarimax
+test_worker = all_jobs[5644] #lstm
+test_worker = all_jobs[12123] #prophet
+
+run_worker(test_worker)
+
+sarima = model.ModelSarimax(df)
+# Test runs (it works as expected)
+# arima.set_validation_expanding_window(train_percent=0.992, test_len=7, start_date="2022-01-01")
+# arima.set_validation_single_split(train_percent=0.75)
+sarima.set_validation_rolling_window(train_percent=0.8, test_len=14, start_date=config.DEV_START_DATE) #TODO: change date/remove it
+sarima.set_prediction_column("use_transfused")
+sarima.set_exogenous_cols(exog_cols=["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"])
+sarima.set_model_parameters(p=7, d=1, q=1, P=0, D=0, Q=2, m=7) #7,1,1, #TODO: add hyperparam grid
+#%%
+sarima.model_run()#, exog=["PAT_BG_0", "PAT_BG_A", "PAT_BG_AB", "PAT_BG_B"])
+
 
 #%%
 
@@ -870,7 +840,6 @@ m_prophet.set_validation_rolling_window(
     start_date="2023-01-01"
 )
 
-#%%
 m_prophet.set_model_parameters(
     lower_limit=2.5,
     upper_limit=97.5
@@ -881,7 +850,7 @@ m_prophet.set_prediction_column(prediction_column="use_transfused")
 m_prophet.print_params()
 
 lstm_params = m_prophet.get_params_df()
-#%%
+
 #Run model
 m_prophet.model_run()
 
@@ -896,7 +865,7 @@ start_date = pd.to_datetime("2020-01-01")
 split_date = pd.to_datetime("2023-12-31")
 end_date = pd.to_datetime("2024-12-31")
 
-pred_col = config.COLUMN
+pred_col = config.PRED_COLUMN
 regressor_cols = ['use_discarded', 'use_expired',   
         'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC', 'count',
         'is_workday', 'workday_enc', 'holiday', 'holiday_enc', 'day_of_week',
@@ -922,7 +891,7 @@ prophet_m = model.ModelProphet(df)
 prophet_train = (
     train_df[pred_col]
     .reset_index()
-    .rename(columns={"date":"ds", config.COLUMN:"y"})
+    .rename(columns={"date":"ds", config.PRED_COLUMN:"y"})
     )
 
 prophet_train.info()
@@ -963,11 +932,11 @@ import sklearn.metrics as metrics #error metrics (mae, mape etc)
 prophet_fc = fc_plotting
 # check accuracy
 print("prophet")
-print("RMSE:", metrics.root_mean_squared_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
-print("MAPE:", metrics.mean_absolute_percentage_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
-print("MAE: ", metrics.mean_absolute_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
-print("MdAE:", metrics.median_absolute_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
-print("MaxE:", metrics.max_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc["use_transfused"]))
+print("RMSE:", metrics.root_mean_squared_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc[config.PRED_COLUMN]))
+print("MAPE:", metrics.mean_absolute_percentage_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc[config.PRED_COLUMN]))
+print("MAE: ", metrics.mean_absolute_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc[config.PRED_COLUMN]))
+print("MdAE:", metrics.median_absolute_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc[config.PRED_COLUMN]))
+print("MaxE:", metrics.max_error(y_pred=prophet_fc["yhat"], y_true=prophet_fc[config.PRED_COLUMN]))
 
 
 
