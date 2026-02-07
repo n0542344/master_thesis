@@ -17,6 +17,7 @@ import statsmodels
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import sklearn.metrics as metrics #error metrics (mae, mape etc)
+# from sktime.performance_metrics.forecasting import MeanAbsoluteScaledError 
 
 #For LSTM
 from sklearn.preprocessing import MinMaxScaler
@@ -369,10 +370,10 @@ class Model:
             json.dump(self.stats, f)
 
         #Save self.predictions (each df individually)
-        print(f"Saving forecasts to {self.dir_name}")
+        #print(f"Saving forecasts to {self.dir_name}")
         for fc_day, df in self.predictions.items():
-            print("Key: ", fc_day)
-            print("Value: ", df)
+            # print("Key: ", fc_day)
+            # print("Value: ", df)
             df.to_csv(path_or_buf=self.file_path+"/"+fc_day+".csv" ,sep=";")
 
         #Save Error Values df
@@ -509,7 +510,7 @@ class Model:
 
         #initialize empty df with structure like stepwise_forecasts (cols, indices, no content)
         forecast_steps = self.predictions.keys()
-        errors = ["ME", "MAE", "MedAE", "MAPE", "RMSE", "MASE", "MaxError"]
+        errors = ["ME", "MAE", "MedAE", "MAPE", "MSE", "RMSE", "MaxError"]
 
         self.forecast_errors = pd.DataFrame(columns=errors, index=forecast_steps)
 
@@ -525,7 +526,7 @@ class Model:
             self.forecast_errors.loc[fc_day, "MAPE"] = metrics.mean_absolute_percentage_error(y_pred=y_pred, y_true=y_true)
             self.forecast_errors.loc[fc_day, "MSE"] = metrics.mean_squared_error(y_pred=y_pred, y_true=y_true)
             self.forecast_errors.loc[fc_day, "RMSE"] = metrics.root_mean_squared_error(y_pred=y_pred, y_true=y_true)
-            # self.stepwise_forecast_errors.loc[fc_day, "MASE"] = metrics.mean_absolute_scaled_error(y_pred=y_pred, y_true=y_true) #MAE/
+            # self.stepwise_forecast_errors.loc[fc_day, "MASE"] = MeanAbsoluteScaledError(y_pred=y_pred, y_true=y_true) #MAE/
             self.forecast_errors.loc[fc_day, "MaxError"] = metrics.max_error(y_pred=y_pred, y_true=y_true)
 
 
@@ -1164,7 +1165,7 @@ class ModelArima(Model):
         self.stats["total_duration"] = round(window_end - all_windows_start, ndigits=2) #TODO: move to setter?
         self.save_results()
 
-        return self.forecast_errors.loc[["Day_1"]]
+        return self.forecast_errors.loc[["Day_1"]].assign(id=self.stats["id"])
 
 
 
@@ -1753,9 +1754,9 @@ class ModelLSTM(Model):
 
         #Simulate individual past forecasts with windows:
         for i, window in enumerate(self.validation_sets):
-            print(f"\n\nWindow {i}/{len(self.validation_sets)}")
+            # print(f"\n\nWindow {i}/{len(self.validation_sets)}")
             
-            print("Loading weights from: ", self.dir_name, " ", self.file_path)
+            # print("Loading weights from: ", self.dir_name, " ", self.file_path)
             self.model.load_weights(self.file_path+"/initial.weights.h5")
             
             process = psutil.Process(os.getpid())
@@ -1775,7 +1776,7 @@ class ModelLSTM(Model):
             self.add_to_results()
             
             window_end = time.time()
-            print(f"Window {i} executed in {window_end - window_start}s\n")
+            # print(f"Window {i} executed in {window_end - window_start}s\n")
 
         print(f"\nTotal time for all windows {window_end - all_windows_start}s")
 
@@ -2002,7 +2003,7 @@ class ModelProphet(Model):
 
 
         for i, window in enumerate(self.validation_sets):
-            print(f"Window {i}/{len(self.validation_sets)}")
+            # print(f"Window {i}/{len(self.validation_sets)}")
             window_start = time.time()
             
             # self.reset_states()
@@ -2016,7 +2017,7 @@ class ModelProphet(Model):
             self.add_to_results()
             window_end = time.time()
             
-            print(f"Window {i} executed in {window_end - window_start}s\n")
+            # print(f"Window {i} executed in {window_end - window_start}s\n")
 
         all_windows_end = time.time()
         self.stats["run_duration"] = all_windows_end - all_windows_start #TODO: move to setter?

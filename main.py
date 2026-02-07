@@ -28,7 +28,7 @@ print(clean.__file__)
 IMAGE_PATH = "plots/2025_10_10-Plots_for_Meeting/"
 RUN_ALL = False
 
-
+importlib.reload(data_model)
 df_raw = load.load_data(path="data/01_raw/blood-data_complete_2025-07-16.tsv")
 df_clean = clean.clean_data(df_raw)
 df_processed = transform.transform_data(df_clean)
@@ -442,7 +442,7 @@ arima = model.ModelArima(df, id=9998)
 # arima.set_validation_expanding_window(train_percent=0.992, test_len=7, start_date="2022-01-01")
 # arima.set_validation_single_split(train_percent=0.75)
 arima.set_prediction_column(prediction_column=config.COLUMN)
-arima.set_validation_rolling_window(train_percent=0.9, test_len=14, start_date="2024-05-01")#config.DEV_START_DATE) #TODO: change date/remove it
+arima.set_validation_rolling_window(train_percent=0.95, test_len=14, start_date="2024-05-01")#config.DEV_START_DATE) #TODO: change date/remove it
 
 arima.set_model_parameters(7, 1, 1) #7,1,1, #TODO: add hyperparam grid
 fc_errors_day_1 = arima.model_run()
@@ -708,7 +708,7 @@ arima_gs_config = {
     "start_date" : [pd.to_datetime(day) for day in ["2015-01-01", "2022-01-01", "2024-01-01"]],
 
     "p" : list(range(0,7)),
-    "d" : list(range(0,7)),
+    "d" : list(range(0,3)),
     "q" : list(range(0,7))
     }
 # arima_gs_config = {
@@ -753,9 +753,21 @@ def run_worker(args):
     
     except Exception as e:
         print(f"Error in {ModelClass.__name__}: {job_id}: {e}")
-        #traceback.print_exc()
-        return (job_id, False, ModelClass.__name__, None)
-    
+        empty_df = pd.DataFrame(
+            data={
+                "ME": None, 
+                "MAE" : None, 
+                "MedAE" : None, 
+                "MAPE" : None, 
+                "MSE" : None, 
+                "RMSE" : None, 
+                "MaxError" : None,
+                "id" : job_id},
+            index="Day_1"
+        )
+        traceback.print_exc()
+        return (job_id, False, ModelClass.__name__, empty_df) 
+
 global_job_id = 1
 all_jobs = []
 
@@ -771,12 +783,13 @@ cores = max(1, multiprocessing.cpu_count() - 2)
 
 
 with multiprocessing.Pool(cores) as pool:
-    result_list = pool.map(run_worker, all_jobs[0:4])
+    result_list = pool.map(run_worker, all_jobs[0:8])
 
 
 #%%
-final_result_df = pd.DataFrame(result_list[: , 3])
-final_result_df.to_csv("grid_search_results.csv")
+valid_results = [res[3] for res in result_list if res is not None]
+final_result_df = pd.concat(valid_results).set_index("id")
+final_result_df.to_csv("./results/Arima/grid_search_results.csv")
 
 print("done")
 
