@@ -7,7 +7,7 @@ from time import time
 from datetime import datetime
 from matplotlib import pyplot as plt
 import seaborn as sns
-
+import os
 
 from src import clean
 from src import config
@@ -27,6 +27,20 @@ print(clean.__file__)
 
 IMAGE_PATH = "plots/2025_10_10-Plots_for_Meeting/"
 RUN_ALL = False
+
+
+df_raw = load.load_data(path="data/01_raw/blood-data_complete_2025-07-16.tsv")
+df_clean = clean.clean_data(df_raw)
+df_processed = transform.transform_data(df_clean)
+df = data_model.Data(data=df_processed)
+
+#%%--------------------------------------------------------------------------------
+# MARK: INPUT EXISTING
+#----------------------------------------------------------------------------------
+PATH_RAW = "data/01_raw/blood-data_complete_2025-07-16.tsv"
+
+#TODO: make backwards file loading: try processed file, if not exists try cleaned, if not exists try raw
+#TODO: Alternative for now -- just load transformed file, because i know it exists.
 
 
 #%%--------------------------------------------------------------------------------
@@ -423,15 +437,15 @@ importlib.reload(model)
 importlib.reload(config) #for DEV_START_DATE
 
 
-arima = model.ModelArima(df)
+arima = model.ModelArima(df, id=9998)
 # Test runs (it works as expected)
 # arima.set_validation_expanding_window(train_percent=0.992, test_len=7, start_date="2022-01-01")
 # arima.set_validation_single_split(train_percent=0.75)
 arima.set_prediction_column(prediction_column=config.COLUMN)
-arima.set_validation_rolling_window(train_percent=0.975, test_len=7, start_date=config.DEV_START_DATE) #TODO: change date/remove it
+arima.set_validation_rolling_window(train_percent=0.9, test_len=14, start_date="2024-05-01")#config.DEV_START_DATE) #TODO: change date/remove it
 
 arima.set_model_parameters(7, 1, 1) #7,1,1, #TODO: add hyperparam grid
-arima.model_run()
+fc_errors_day_1 = arima.model_run()
 #%%
 #Try out stepwise error measurements (now only mae):
 arima.plot_stepwise(plot_type="forecast") #forecast
@@ -507,7 +521,7 @@ sarima = model.ModelSarimax(df)
 # Test runs (it works as expected)
 # arima.set_validation_expanding_window(train_percent=0.992, test_len=7, start_date="2022-01-01")
 # arima.set_validation_single_split(train_percent=0.75)
-sarima.set_validation_rolling_window(train_percent=0.975, test_len=7, start_date=config.DEV_START_DATE) #TODO: change date/remove it
+sarima.set_validation_rolling_window(train_percent=0.8, test_len=14, start_date=config.DEV_START_DATE) #TODO: change date/remove it
 sarima.set_prediction_column("use_transfused")
 sarima.set_exogenous_cols(exog_cols=["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"])
 sarima.set_model_parameters(p=7, d=1, q=1, P=0, D=0, Q=2, m=7) #7,1,1, #TODO: add hyperparam grid
@@ -548,20 +562,20 @@ exog_cols = ["use_discarded", "use_expired", 'ward_AN', 'ward_CH', 'ward_I1', 'w
 m_lstm.set_validation_rolling_window(
     #TODO: store validation_sets as df: index + columns train start/train end/test start/test end
     #TODO: add option to choose days for train and test period.
-    train_percent=0.85,#9,#985,#975,
-    test_len=14, 
-    start_date="2022-01-01"
+    train_percent=0.95,#9,#985,#975,
+    test_len=7, 
+    start_date="2024-01-01"
 )
 
 #%%
 m_lstm.set_model_parameters(
-    inner_window = 365, #365*2, #365,#200,#365, #365*2 #365 to capture at least 1 year, #for training length
+    inner_window = 128, #365*2, #365,#200,#365, #365*2 #365 to capture at least 1 year, #for training length
 
     memory_cells=64,#64
     epochs=20,#20
     batch_size=32, #32
     dropout=0.5,
-    pi_iterations=100, #100 #how often to run, to calculate prediction intervals
+    pi_iterations=10, #100 #how often to run, to calculate prediction intervals
     optimizer="adam",
     loss="mae",
     activation_fct="relu",
@@ -593,9 +607,9 @@ import pandas as pd
 #TODO: grid search options/possiblilites rough idea:
 grid_search_lstm_options = {
     "validation_type" : ["rolling"], #, "expanding"],
-    "train_prct" : list(np.arange(0.6, 0.8, 0.1)), #wouldnt it make more sense to use int of days before to train? like train_days = 365*7 or 730 or something?
-    "test_len" : [14],
-    "start_date" : [pd.to_datetime(day) for day in ["2022-01-01", "2023-01-01", "2023-07-01", "2024-01-01", "2024-01-01"]],
+    "train_prct" : [0.7, 0.8], #list(np.arange(0.6, 0.8, 0.1)), #wouldnt it make more sense to use int of days before to train? like train_days = 365*7 or 730 or something?
+    "test_len" : [7, 14],
+    "start_date" : [pd.to_datetime(day) for day in ["2015-01-01", "2022-01-01", "2024-01-01"]],
     # "start_date" : [pd.to_datetime(day) for day in ["2008-01-01", "2012-01-01", "2016-01-01", "2020-01-01", "2024-01-01"]],
     
     "memory_cell" : [32, 64, 128],
@@ -603,16 +617,170 @@ grid_search_lstm_options = {
     "batch_size" : [32],
     "pi_iterations" : [100, 1000],
     "optimizer" : ["adam"],
-    "loss" : ["mae"]#,
+    "loss" : ["mean_squared_error", "mean_absolute_error", "mean_squared_logarithmic_error"] #see description here:https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/
     #"exog_cols" : exog_cols #this would need to be 0-all of them? or just 0 + all?
 }
-
+#%%
 search_grid = list(product(*grid_search_lstm_options.values()))
+print(len(search_grid))
 #fill dict with lists values:
-for grid in search_grid[0:10]:
-    search_grid_dict = dict(zip(grid_search_lstm_options, grid))
+for i, grid in enumerate(search_grid[0:10]):
+    search_grid_dict = dict(zip(grid_search_lstm_options.keys(), grid))
     print(search_grid_dict)
+#%%
+#MARK: TEST GRID SEARCH 
+#IMPLEMENTATION TEST FOR SARIMAX + PARALLELIZATION:
+sarima.set_validation_rolling_window(train_percent=0.8, test_len=14, start_date=config.DEV_START_DATE) #TODO: change date/remove it
+sarima.set_prediction_column("use_transfused")
+sarima.set_exogenous_cols(exog_cols=["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"])
 
+#TODO: grid search options/possiblilites rough idea:
+grid_search_lstm_options = {
+    "train_percent" : list(np.arange(0.5, 0.9, 0.1)),
+    "p" : list(range(0,9)),
+    "d" : list(range(0,9)),
+    "q" : list(range(0,9)),
+    "P" : list(range(0,9)),
+    "d" : list(range(0,9)),
+    "q" : list(range(0,9)),
+    "q" : list(range(0,15)),
+}
+["use_discarded", "use_expired", 'ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC', "workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year", "tlmin", "tlmax"]
+
+#%% 
+# Test with arima, is the fastest.
+from sklearn.model_selection import ParameterGrid
+from itertools import combinations
+
+exog_types = {
+    "uses" : ["use_discarded", "use_expired"],
+    "wards" : ['ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC'],
+    "days" : ["workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year"],
+    "weather" : ["tlmin", "tlmax"]
+}
+
+keys = list(exog_types.keys())
+all_combinations = []
+for k in range(1, len(keys) + 1):
+    combos = list(combinations(keys, k))
+    all_combinations.extend(combos)
+    
+print(all_combinations)
+print(len(all_combinations))
+
+def get_all_lists_combinations(input_dict):
+    all_combinations_list = []
+    for combo in all_combinations:
+        print(combo)
+        merge = []
+        for v in combo:
+            merge.extend(input_dict.get(v))
+        all_combinations_list.append(merge)
+
+    return all_combinations_list
+
+test_list = get_all_lists_combinations(exog_types)
+
+#Gets all combinations of lists (as value dict), returning list of tubles, where index 0 is list of keys and index 1 is one combined list of values
+def get_combinations_with_keys(input_dict):
+    for k in range(1, len(keys) + 1):
+        combos = list(combinations(keys, k))
+        all_combinations.extend(combos)
+
+    combos_list_of_tuples = []
+    for combo in all_combinations:
+        merge = []
+        for v in combo:
+            merge.extend(input_dict.get(v))
+        combos_list_of_tuples.append((list(combo), merge))
+
+    return combos_list_of_tuples
+
+test_tuples = get_combinations_with_keys(exog_types)
+#%%
+arima_gs_config = {
+    "prediction_column" : [config.COLUMN],
+    
+    "exog_cols" : [list[1] for list in test_tuples[:5]],
+    
+    "train_percent" : np.arange(0.6, 0.8, 0.1),
+    "test_len" : [14],
+    "start_date" : [pd.to_datetime(day) for day in ["2015-01-01", "2022-01-01", "2024-01-01"]],
+
+    "p" : list(range(0,7)),
+    "d" : list(range(0,7)),
+    "q" : list(range(0,7))
+    }
+# arima_gs_config = {
+#     "exog_cols" : [list[1] for list in test_tuples],
+#     "prediction_col" : [config.COLUMN],
+#     "train_percent" : np.arange(0.6, 0.8, 0.1),
+#     "start_date" : [pd.to_datetime(day) for day in ["2015-01-01", "2022-01-01", "2024-01-01"]],
+#     "p" : list(range(0,9)),
+#     "d" : list(range(0,9)),
+#     "q" : list(range(0,9))
+#     }
+
+
+arima_grid = list(ParameterGrid(arima_gs_config))
+
+for i, grid in enumerate(arima_grid):
+    grid["id"] = i+1
+
+#%%
+import multiprocessing
+import traceback
+importlib.reload(model)
+importlib.reload(config)
+
+
+
+
+def run_worker(args):
+    ModelClass, params = args
+    job_id = params.get("id")
+
+    try:
+        model_instance = ModelClass(df, id=job_id)
+        model_instance.set_prediction_column(**params)
+        model_instance.set_validation_rolling_window(**params)
+        model_instance.set_model_parameters(**params) 
+        
+        run_results = model_instance.model_run()
+        print(f"Job {job_id} finished in {model_instance.stats['total_duration']}")
+
+        return (job_id, True, ModelClass.__name__, run_results)
+    
+    except Exception as e:
+        print(f"Error in {ModelClass.__name__}: {job_id}: {e}")
+        #traceback.print_exc()
+        return (job_id, False, ModelClass.__name__, None)
+    
+global_job_id = 1
+all_jobs = []
+
+for grid in arima_grid:
+    grid["global_id"] = global_job_id
+    all_jobs.append( (model.ModelArima, grid) )
+    global_job_id += 1
+
+
+#%%
+cores = max(1, multiprocessing.cpu_count() - 2)
+
+
+
+with multiprocessing.Pool(cores) as pool:
+    result_list = pool.map(run_worker, all_jobs[0:4])
+
+
+#%%
+final_result_df = pd.DataFrame(result_list[: , 3])
+final_result_df.to_csv("grid_search_results.csv")
+
+print("done")
+
+#%%
 
 
 # #TODO: grid search -- this is what a possible list of dicts could look like (missing exog_cols):

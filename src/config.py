@@ -1,7 +1,7 @@
 #Global Variables and settings
 import pandas as pd
 from time import time
-ENABLE_TIMING = True #If true, print messages. #TODO: add logging module to do that
+ENABLE_TIMING = False #If true, print messages. #TODO: add logging module to do that
 ENABLE_LOGGING = True
 SAVE_FIGS = False
 

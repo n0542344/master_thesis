@@ -54,8 +54,8 @@ class Model:
 
     def __init__(self, data: data_model.Data, id: int=None): #TODO: maybe add configuration?
         # TODO: change parameter of model to be of 'Data' type
-        self.data = data
-        self.stats = {}
+        self.data = data.asfreq("d")
+        self.stats = {"id" : id}
 
         #id for model run when using grid search
         if id == None:
@@ -192,7 +192,7 @@ class Model:
 
 
 
-    def set_validation_rolling_window(self, train_percent: float, test_len: int, start_date: str=None):
+    def set_validation_rolling_window(self, train_percent: float, test_len: int, start_date: str=None, **kwargs):
         """
         Set parameters of validation_config variable (doesnt RUN validation) and create a
         set of indices (list of tuples) for train/test split by calling make_validation_set().
@@ -269,7 +269,7 @@ class Model:
         self.alpha = alpha
 
 
-    def set_prediction_column(self, prediction_column: str=None):
+    def set_prediction_column(self, prediction_column: str=None, **kwargs):
         #TODO: moved here from LSTM
         """
         Docstring for set_prediction_column
@@ -330,10 +330,10 @@ class Model:
         # again every iteration:
         #date+hh:mm+grid(id if doing grid search)
         self.date = datetime.now().strftime("%Y%m%d_%H%M")
-        if self.id == None:
-            self.dir_name = f"{self.date}-lstm"
-        elif self.id != None:
-            self.dir_name = f"{self.date}-{self.id}-lstm"
+        if self.stats["id"] == None:
+            self.dir_name = f"{self.stats['model_name']}/{self.date}"
+        elif self.stats["id"] != None:
+            self.dir_name = f"{self.stats['model_name']}/{self.stats['id']}_{self.date[:-5]}" #dont use %H%M if id is set
 
 
         #make directory with name (see above)
@@ -364,6 +364,9 @@ class Model:
         #make params json
         with open("./results/"+self.dir_name+"/params.json", "w") as f:
             json.dump(self.model_params, f)
+        #make stats json
+        with open("./results/"+self.dir_name+"/stats.json", "w") as f:
+            json.dump(self.stats, f)
 
         #Save self.predictions (each df individually)
         print(f"Saving forecasts to {self.dir_name}")
@@ -373,8 +376,10 @@ class Model:
             df.to_csv(path_or_buf=self.file_path+"/"+fc_day+".csv" ,sep=";")
 
         #Save Error Values df
-        with open("./results/"+self.dir_name+"/forecast_errors.csv", "w") as f:
-            self.forecast_errors
+        self.forecast_errors.to_csv(path_or_buf=self.file_path+"/forecast_errors.csv" ,sep=";")
+        # with open("./results/"+self.dir_name+"/forecast_errors.csv", "w") as f:
+        #     print(self.forecast_errors)
+        #     self.forecast_errors.to_csv()
 
         print(f"Finished saving file to {self.dir_name}")
 
@@ -383,7 +388,7 @@ class Model:
 
     @timer_func
     def get_start_end_days(self, window):
-        #TODO: probably better in Model class!
+        #TODO: probably better in Model class! --> Maybe, but i think this setup/need is kinda specific for lstm model
 
         # since lstm works better with running multiple inputs (like a rolling window) and supplying y  so it can adjust
         # weights and biases more often. so we do an inner loop for the forecast window supplied by rolling/expanding window 
@@ -450,7 +455,7 @@ class Model:
 
 
     @timer_func
-    def add_to_results(self, preds):        
+    def add_to_results(self):        
         #Add to existing self.predictions dictionary. self.predictions contains n keys of name "Day_"n_i where n=len(fc_days)
         # with the value of a dataframe with columns Actual, Mean, Lower, Upper and datetime index. 
         # Each dataframe gets expanded/filled in every window-iteration by the current (of the window) value of the day
@@ -1094,22 +1099,22 @@ class ModelComparison(Model):
 #xXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 class ModelArima(Model):
-    class_name = "Arima"
 
-    def __init__(self, data): #TODO: maybe add config, but more sense in base class imo
+    def __init__(self, data, id=None): #TODO: maybe add config, but more sense in base class imo
         super().__init__(data)
         self.model_params = {
             "p" : None,
             "d" : None,
             "q" : None
         }
-
+        self.stats["model_name"] = "Arima"
+        self.stats["id"] = id
 
     #------------------------------------------------------------------------------------------------
     # Setters
     #------------------------------------------------------------------------------------------------
 
-    def set_model_parameters(self, p: int=1, d: int=1, q: int=1):
+    def set_model_parameters(self, p: int=1, d: int=1, q: int=1, **kwargs):
         self.model_params["p"] = p
         self.model_params["d"] = d
         self.model_params["q"] = q
@@ -1117,8 +1122,9 @@ class ModelArima(Model):
 
 
 
+
     #composite function:
-    def model_run(self, print_fit_summary=True, last_summary_only=True):
+    def model_run(self, print_fit_summary=False, last_summary_only=False, **kwargs):
         """Composite function that combines make_model, fit(), print_fit_summary(), predict(),
         add_stepwise_forecasts()
 
@@ -1132,58 +1138,36 @@ class ModelArima(Model):
             validation_config by setter functions for rolling/expanding window or single split.
             Defaults to None, which will then use abovementioned value.
         """
+        #TODO: Update docstring
         self.create_result_dir()
 
-        #TODO: Write docstring
         all_windows_start = time.time()
 
-        #Important!
-        self.models = [] #TODO: still necessary or delete?
-
         for i, window in enumerate(self.validation_sets):
+            window_start = time.time()
+
             model = self.make_model(window)
             model_fit = self.fit(model)
 
             self.print_fit_summary(model_fit, i, print_fit_summary, last_summary_only)
-
+            
             preds = self.get_prediction_ARIMA(model_fit, window)
-
-            #Get stepwise values:
             self.add_to_results_ARIMA(preds, test_start=window[2])
+            
+            window_end = time.time()
+            #print(f"Window {i} executed in {window_end - window_start}s\n")
+
+        print(f"\nTotal time for all windows {window_end - all_windows_start}s")
 
         self.add_stepwise_difference()
         self.get_stepwise_errors()
-        # self.add_stepwise_errors()
-        # self.add_stepwise_difference()
+        self.stats["total_duration"] = round(window_end - all_windows_start, ndigits=2) #TODO: move to setter?
+        self.save_results()
 
-    # #composite function:
-    # def model_run(self, col: str="count", print_fit_summary=True, last_only=True, days=None):
-    #     """Composite function that combines make_model, fit(), print_fit_summary(), predict(),
-    #     add_stepwise_forecasts()
+        return self.forecast_errors.loc[["Day_1"]]
 
-    #     Args:
-    #         col (str, optional): column to make model and run prediction for.
-    #         Defaults to "count".
-    #         print_fit_summary (bool, optional): If true, prints the summary for the fit().
-    #         Defaults to True
-    #         last_only (bool, optional): If true prints only summary for last fit(). Otherwise prints
-    #         summary for every fit (of rolling/expanding window).
-    #         Only relevant if print_fit_summary argument is true. defaults to True.
-    #         days (int, optional): Manually set days to look ahead (steps). Normally supplied via
-    #         validation_config by setter functions for rolling/expanding window or single split.
-    #         Defaults to None, which will then use abovementioned value.
-    #     """
 
-    #     self.make_model(col=col)
-    #     self.fit()
-    #     if print_fit_summary:
-    #         self.print_fit_summary(last_only=last_only)
-    #     self.get_prediction(days=days)
 
-    #     #Get stepwise values:
-    #     self.add_stepwise_forecasts()
-    #     self.add_stepwise_errors(col_pred=col)
-    #     self.add_stepwise_difference()
 
 
     @timer_func
@@ -1191,6 +1175,7 @@ class ModelArima(Model):
         #TODO: this for now is only for ARIMA, but its refactoring of add_to_results from
         # Model class, but instead of OOP its Functional
         #TODO: unify with add_to_results_SARIMAX?
+        #TODO: update docstring
 
         #Create self.predictions datafrmae, which is final result of this models run (
         #including all windows! contains each forecast days as separate df: Day_1:df, Day_2:df,
@@ -1231,6 +1216,7 @@ class ModelArima(Model):
             
 
     def _get_day_predictions(self, day, pred_df, test_start):
+        #TODO: write docstring
         forecast_date = test_start + pd.Timedelta(days=day)
 
         return pred_df.loc[forecast_date]
@@ -1240,7 +1226,7 @@ class ModelArima(Model):
 
     @timer_func
     def make_model(self, window):
-        #TODO: add model description
+        #TODO: update model description
         # create model with trainign data + (hyper)parameters
 
 
@@ -1257,7 +1243,8 @@ class ModelArima(Model):
             order=(self.model_params["p"], 
                     self.model_params["d"],
                     self.model_params["q"]
-                    )
+                    ),
+            trend="n"
         )
 
         return model
@@ -1266,11 +1253,6 @@ class ModelArima(Model):
 
     @timer_func
     def fit(self, model):
-        # #Important!
-        # self.model_fits = []
-
-        # for model in self.models:
-        #     self.model_fits.append(model.fit())
         return model.fit()
 
 
@@ -1282,34 +1264,13 @@ class ModelArima(Model):
             else:
                 print(model_fit.summary())
 
-    #Not in use, as far as i can see
-    # @timer_func
-    # def predict(self, days=None):
-    #     """Predict x days ahead, where x == 'days'
-
-    #     Args:
-    #         days (_type_, optional): Days to predict ahead. Defaults to None, then
-    #         days will be loaded from validation_config["test_len"].
-    #     """
-    #     # generate forecast for x time
-    #     # (see base class)
-
-    #     #Important!
-    #     self.predictions = []
-
-    #     if days == None:
-    #         days = self.validation_config["test_len"]
-
-    #     for fit in self.model_fits:
-    #         self.predictions.append(fit
-    #             .get_forecast(steps=days)
-    #             .rename(columns={"predicted_mean":"Prediction"})
-    #         )
 
 
     #TODO: rename to predict()
     @timer_func
     def get_prediction_ARIMA(self, model_fit, window):
+        #TODO: write docstring
+        #TODO: maybe merge with get_prediction_SARIMAX -- Keyword: composition
 
         #TODO: move to separate function OR init!
         if self.alpha == None:
@@ -1608,6 +1569,7 @@ class ModelSarimax(Model):
     def add_to_results_SARIMAX(self, pred_df, test_start):
         #TODO: this for now is only for ARIMA, but its refactoring of add_to_results from
         #Specific for each Model (arima/sarimax are same though).
+        #TODO: maybe merge with add_to_results_arima -- Keyword: composition
 
         # Model class, but instead of OOP its Functional
 
@@ -1719,7 +1681,7 @@ class ModelLSTM(Model):
 
 
     def set_model_parameters(
-            #TODO: move to base class Model
+            #TODO: move to base class Model --> No, different for every subclass!
             self, 
             inner_window: int=365,
             memory_cells: int=64,
@@ -1776,12 +1738,11 @@ class ModelLSTM(Model):
     def model_run(self, print_fit_summary=True, last_only=True): 
         # params here should only be for output to show (df, results, plot etc), no change in model run
         # expanding/rolling window needs to be set already!
+        #TODO: Write docstring
 
         self.create_result_dir()
 
-        #TODO: Write docstring
         all_windows_start = time.time()
-        self.stats["windows_num"] = len(self.validation_sets)
         
         #initialize model for first time (needs X_train for shape, so need to run other fcts once)
         self.get_start_end_days(self.validation_sets[0])
@@ -1816,12 +1777,11 @@ class ModelLSTM(Model):
             window_end = time.time()
             print(f"Window {i} executed in {window_end - window_start}s\n")
 
-        self.stats["total_duration"] = window_end - all_windows_start #TODO: move to setter?
         print(f"\nTotal time for all windows {window_end - all_windows_start}s")
 
         self.add_stepwise_difference()
         self.get_stepwise_errors()
-
+        self.stats["total_duration"] = window_end - all_windows_start #TODO: move to setter?
         self.save_results()
 
 
@@ -2039,7 +1999,6 @@ class ModelProphet(Model):
         self.create_result_dir()
 
         all_windows_start = time.time()
-        self.stats["windows_num"] = len(self.validation_sets)
 
 
         for i, window in enumerate(self.validation_sets):

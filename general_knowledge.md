@@ -208,3 +208,22 @@ Speeding operations (vectorized vs loops).
 
 ------
 Add section about tensorflow, difference eager<>graph mode. how to speed up etc.
+
+-----
+Design philosophys (u.a.):
+design composite functino (orchestrator function) in a 'passing data' style:
+A = get_A()
+B = get_B(A)
+...
+
+or a stateful design:
+self.step_one()
+self.step_two()
+
+argue why whcih was chosen -- second one, because you can make sure, no data gets carried over? and this is why the reset_state() function is needed ig.
+
+--------------
+
+
+note: trend parameter in (s)arima build_model: can be n, c, t, ct. talk about why which was chosen.
+defaults are c or n. n or t is possible, others throw error?
