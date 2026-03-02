@@ -1,4 +1,4 @@
-#%% MARK: libs etc
+#__ MARK: libs etc
 #This needs to be at the top
 import os
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -64,7 +64,7 @@ TOTAL_RAM_GB = 10
 RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
 
 
-#%%
+#__
 def run_worker(args):
     gc.collect()
     gc.collect()
@@ -280,13 +280,13 @@ def main():
     logger.info("Finished Running the pipeline")
 
 
-#%%
+#__
 if __name__ == "__main__":
     main()
 
 
 
-#%%
+#__
 # m_prophet = model.ModelProphet(df)
 # m_prophet.set_validation_rolling_window(**test_worker[1])
 # m_prophet.set_model_parameters(**test_worker[1])
@@ -295,12 +295,12 @@ if __name__ == "__main__":
 # m_prophet.model_run()
 
 
-#%%
+
 
 
 #TODO: remove
 if RUN_ALL == True:
-#%%--------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------
 # MARK: INPUT EXISTING
 #----------------------------------------------------------------------------------
     PATH_RAW = "data/01_raw/blood-data_complete_2025-07-16.tsv"
@@ -309,7 +309,7 @@ if RUN_ALL == True:
     #TODO: Alternative for now -- just load transformed file, because i know it exists.
 
 
-    #%%--------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------------
     # MARK: INPUT
     #----------------------------------------------------------------------------------
 
@@ -317,7 +317,7 @@ if RUN_ALL == True:
     df_raw = load.load_data(path="data/01_raw/blood-data_complete_2025-07-16.tsv")
     # df_raw = load.load_data(path="data/01_raw/testdaten.tsv")
 
-    #%%
+    #__
     load.show_info(df=df_raw)
     hidden_cols=["date", "EC_ID_I_hash", "EC_ID_O_hash", "T_ISO", "T_DE_T", "T_US", "T_DE_S", "T_US_T", "T_DE", "T_ISO_T", "T_XL"]
     for col in df_raw.columns:
@@ -331,7 +331,7 @@ if RUN_ALL == True:
 
 
 
-    #%%--------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------------
     # MARK: CLEANING 
     #----------------------------------------------------------------------------------
     #Runs only if no file exists at. If not existing, saves df to new file
@@ -348,13 +348,13 @@ if RUN_ALL == True:
     #df_clean = df_clean.loc[mask]
     #df_clean = df_clean['2018-01-01':'2024-12-31'] #only works on monotonic (==daily aggregated, no duplicate days) df
 
-    #%%
+    #
 
     #TODO: Check what unique vals are present in df
     clean.check_unique_values(df_clean.drop(["EC_ID_I_hash", "EC_ID_O_hash", "PAT_WARD"], axis=1))
 
 
-    #%%
+    #
     # Plot frequency counts for unique values in every column
     #TODO: move into viz.py
 
@@ -369,7 +369,7 @@ if RUN_ALL == True:
 
 
     importlib.reload(viz)
-    ##%%
+    ##
     # Plot each patient wards transfusion counts (for wards with >500 transfusions)
     viz.plot_patient_wards(df_clean, n=500, save_figs=False, location=IMAGES_PATH_EXPLORATION, foldername="")
 
@@ -379,7 +379,7 @@ if RUN_ALL == True:
 
 
 
-    #%%--------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------------
     # MARK: TRANSFORMING
     # /PROCESSING
     #----------------------------------------------------------------------------------
@@ -399,7 +399,7 @@ if RUN_ALL == True:
     df_processed = transform.transform_data(df_clean)
 
 
-    #%% #Plot seasonalities daily & weekly of processed df
+    #__ #Plot seasonalities daily & weekly of processed df
 
     importlib.reload(viz)
 
@@ -435,7 +435,7 @@ if RUN_ALL == True:
 
 
 
-    #%%--------------------------------------------------------------------------------
+    #__--------------------------------------------------------------------------------
     # MARK: DATA VIZ 
     # (EXPLORATION)
     #----------------------------------------------------------------------------------
@@ -449,7 +449,7 @@ if RUN_ALL == True:
 
     df = data_model.Data(data=df_processed)
 
-    #%%
+    #__
 
 
     #df.print_head()
@@ -457,14 +457,14 @@ if RUN_ALL == True:
     df[START_DATE_EXPLORATION:].plot_seasonal(plot_type='weekly', col_name='use_transfused')
 
 
-    ##%%
+    ##__
     #Boxplots
     df[START_DATE_EXPLORATION:].plot_boxplots(col_name='use_transfused')
     df[START_DATE_EXPLORATION:].plot_seasonal_subseries(col_name='use_transfused') #NOTE: i think it works, but not enough dummy data.
     #TODO: check if seasonal subseries plot works with multi-year data
 
 
-    ##%%
+    ##__
     #Decompose
     df[PRE_COVID_START:PRE_COVID_END].decompose_one(col_name='use_transfused')
 
@@ -477,14 +477,14 @@ if RUN_ALL == True:
 
 
 
-    ##%%
+    ##__
 
 
 
     df[pd.to_datetime("2024-01-01"):pd.to_datetime("2024-12-31")].plot_daily_heatmap(col_name='use_transfused')
 
 
-    #%% Visualize counts for all plots (as of now only for those starting with 901AN) on top of each other, so that
+    #__ Visualize counts for all plots (as of now only for those starting with 901AN) on top of each other, so that
     # its visible, where naming of one ward starts/ends 
 
 
@@ -508,7 +508,7 @@ if RUN_ALL == True:
     plt.savefig(fname="/".join([IMAGES_PATH_EXPLORATION + "show_inconsistency_wards"]))
     plt.show()
 
-    #%%
+    #__
     # Get unique Letter-combinations (i guess top-wards) from all wards:
 
     import re
@@ -528,7 +528,7 @@ if RUN_ALL == True:
     print(ward_results)
     print(len(ward_results))
 
-    #%%--------------------------------------------------------------------------------
+    #__--------------------------------------------------------------------------------
     # MARK: STATIONARITY 
     # Check for Stat./Make stationarys
     #----------------------------------------------------------------------------------
@@ -550,7 +550,7 @@ if RUN_ALL == True:
     from statsmodels.tsa.stattools import adfuller
     from statsmodels.tsa.stattools import kpss
 
-    ##%%
+    ##__
     #Time series plots (acf, pacf etc)
     df.plot_autocorrelation(col_name='count')
     df.plot_partial_autocorrelation(col_name='count')
@@ -642,7 +642,7 @@ if RUN_ALL == True:
 
 
 
-    #%% 
+    #__ 
     # MARK: COMPARISON
     #----------------------------------------------------------------------------------
     import importlib
