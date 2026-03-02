@@ -7,9 +7,9 @@ LOCAL_PATH="."           # run this script from your project root
 DATE=$(+%Y%m%d%H%M%S)
 # ── Generate requirements.txt ────────────────────────────────────────────────
 echo "Generating requirements.txt with pipreqs..."
+mv requirements.txt requirements.txt.bak.${DATE}
 pipreqs --force "$LOCAL_PATH" \
     --ignore .venv,notebooks,data,logs,docs,plots,results
-cp requirements.txt requirements.deploy.${DATE}.txt
 echo "Done: requirements.txt"
 
 # ── Sync to server ───────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ rsync -avz --progress -e "ssh" \
     --exclude='*.tmp' \
     --exclude='README' \
     --exclude='general_knowledge.md' \
-    --exclude='LSTM_inner-window.jpg' \
+    --exclude='LSTM-inner-window.jpg' \
     --exclude='LSTM_inner-environment*' \
     # ── Add more exclusions below as needed ──────────────────────────────
     # --exclude='some_other_dir/' \
