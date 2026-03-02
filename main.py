@@ -59,7 +59,7 @@ prophet_logger.setLevel(logging.CRITICAL)
 RUN_ALL = False
 RUN_DATE = datetime.today().strftime('%Y%m%d-%H_%M')
 
-TOTAL_CORES = 2
+TOTAL_CORES = 12
 TOTAL_RAM_GB = 10
 RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
 
@@ -141,7 +141,7 @@ def limit_memory(maxsize_gb):
 
 
 def main():
-    multiprocessing.set_start_method("spawn", force=True)
+    multiprocessing.set_start_method("spawn", force=True) #use spawn instead of sub-processes
 
     log_file = f"./logs/pipeline_{RUN_DATE}.log"
     formatter = logging.Formatter('%(asctime)s [%(processName)s] [%(levelname)s] %(message)s')
@@ -190,19 +190,22 @@ def main():
     full_grid_arima = list(ParameterGrid(config.gs_config_arima))
     full_grid_sarimax = list(ParameterGrid(config.gs_config_sarimax))
     full_grid_lstm = list(ParameterGrid(config.gs_config_lstm))
-    sampled_grid_lstm = sample_grid(full_grid_lstm, n_samples=10) #only sample lstm, others are fast enough to fully search
+    #sampled_grid_lstm = sample_grid(full_grid_lstm, n_samples=10) #only sample lstm, others are fast enough to fully search
     full_grid_prophet = list(ParameterGrid(config.gs_config_prophet))
 
 
-
-    #TODO: sample after creating all_jobs to create ids refering to full grid (instead of ids continuous for sampled grid)
+    #Create jobs list => tuple of Model class, input settings, df
     all_jobs = {}
 
     all_jobs["arima"] = add_model_grid_to_all_jobs(full_grid_arima, model.ModelArima, df, get_start_id(all_jobs))
     all_jobs["sarimax"] = add_model_grid_to_all_jobs(full_grid_sarimax, model.ModelSarimax, df, get_start_id(all_jobs))
-    all_jobs["lstm"] = add_model_grid_to_all_jobs(sampled_grid_lstm, model.ModelLSTM, df, get_start_id(all_jobs))
+    all_jobs["lstm"] = add_model_grid_to_all_jobs(full_grid_lstm, model.ModelLSTM, df, get_start_id(all_jobs))
     all_jobs["prophet"] = add_model_grid_to_all_jobs(full_grid_prophet, model.ModelProphet, df, get_start_id(all_jobs))
 
+    #Sample jobs now, to still have continuous global ids
+    sampled_jobs = all_jobs
+    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=30)
+    
     # cores = 24#max(1, multiprocessing.cpu_count() - 1)
     # logger.info(f"---Using {cores} cores---")
     logger.info(f"---Using {TOTAL_CORES} cores with max {TOTAL_RAM_GB} GB RAM---")
@@ -214,7 +217,7 @@ def main():
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
     ) as pool:
-        result_list_arima = pool.map(run_worker, all_jobs["arima"][0:5])
+        result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:100])
 
     valid_results_arima = [res[3] for res in result_list_arima if res is not None]
     final_result_df_arima = pd.concat(valid_results_arima).set_index("id")
@@ -230,7 +233,7 @@ def main():
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
     ) as pool:
-        result_list_sarimax = pool.map(run_worker, all_jobs["sarimax"][0:5]) #all_jobs["sarimax"][0:8])
+        result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:100]) #all_jobs["sarimax"][0:8])
 
     valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
     final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
@@ -245,11 +248,11 @@ def main():
         initargs=(RAM_PER_WORKER,)
     ) as pool:
         try:
-            result_list_prophet = pool.map(run_worker, all_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
+            result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
         except Exception as e:
             print(f"Model run Prophet failed: {e}", flush=True)
             traceback.print_exc()
-        result_list_prophet = pool.map(run_worker, all_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
+        # result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
 
     print("finished with prophet, getting results")
     valid_results_prophet = [res[3] for res in result_list_prophet if res is not None]
@@ -265,9 +268,9 @@ def main():
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
     ) as pool:
-        # result_list_lstm = pool.map(run_worker, all_jobs["lstm"][0:5]) #all_jobs["sarimax"][0:8])
+        # result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:5]) #all_jobs["sarimax"][0:8])
         try:
-            result_list_lstm = pool.map(run_worker, all_jobs["lstm"][0:10]) #all_jobs["sarimax"][0:8])
+            result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:12]) #all_jobs["sarimax"][0:8])
         except Exception as e:
             print(e)
 
