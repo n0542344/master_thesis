@@ -330,7 +330,7 @@ class Model:
         # -> only build model once before window-loop, save weights on compile, then load 
         # again every iteration:
         #date+hh:mm+grid(id if doing grid search)
-        self.date = datetime.now().strftime("%Y%m%d_%H%M")
+        self.date = datetime.now().strftime("%Y%m%d_%H%M") #TODO: add global run date, which is same for all dirs
         if self.stats["id"] == None:
             self.dir_name = f"{self.stats['model_name']}/{self.date}"
         elif self.stats["id"] != None:
@@ -338,8 +338,8 @@ class Model:
 
 
         #make directory with name (see above)
-        print(f"Creating directory {self.dir_name}")
-        print(f"Saving params to {self.dir_name}")
+        # print(f"Creating directory {self.dir_name}")
+        # print(f"Saving params to {self.dir_name}")
         self.file_path = "./results/"+self.dir_name
         Path(self.file_path).mkdir(parents=True, exist_ok=True)
 
@@ -762,7 +762,11 @@ class Model:
         idx = int(len(self.data[start_date:]) * prct)
         split_date = self.data[start_date:].index[idx]
 
-        print(f"Split index/date with start_date ({start_date}: \n {split_date})")
+        self.stats["start_date"] = str(start_date)
+        self.stats["split_date"] = str(split_date)
+        self.stats["end_date"] = str(self.data.index.max().date())
+
+        #print(f"Split index/date with start_date ({start_date}: \n {split_date})")
 
         return split_date
 
@@ -996,6 +1000,13 @@ class ModelComparison(Model):
         self.predictions["mean"] = self.run_mean(col=self.col, model_run=True)
         self.predictions["seasonal_naive"] = self.run_seasonal_naive(col=self.col, model_run=True)
 
+        self.predictions.rename(columns={config.PRED_COLUMN : "Actual"}, inplace=True)
+
+        self.get_stepwise_errors("single_value")
+        self.get_stepwise_errors("naive")
+        self.get_stepwise_errors("mean")
+        self.get_stepwise_errors("seasonal_naive")
+
         #TODO: make column with difference of pred type and actual value
 
 
@@ -1089,6 +1100,44 @@ class ModelComparison(Model):
             return self.data["seasonal_naive"]
 
 
+    
+    #@timer_func
+    def get_stepwise_errors(self, fc_col="Mean"):
+        #TODO move to base class Model
+        #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
+        #since lstm currently has different architecture of dataframes for results, ill make a new
+        #function here. old (comparison, (s)arima) will be adjusted to be same as lstm model.
+        print("NAIVE FC ERROR")
+
+        #initialize empty df with structure like stepwise_forecasts (cols, indices, no content)
+        #forecast_steps = self.predictions.keys()
+        errors = ["ME", "MAE", "MedAE", "MAPE", "MSE", "RMSE", "MaxError"]
+        if not hasattr(self, "forecast_errors"):
+            print("Creating empty df forecast_error")
+            self.forecast_errors= pd.DataFrame(columns=errors)
+
+        df = self.predictions[["Actual", fc_col]].dropna()
+
+        
+        y_pred = df[fc_col]
+        y_true = df["Actual"]
+        
+        error_dict = {
+        "ME" : np.median(y_pred - y_true) ,#median error -- shows bias (positive or negative)
+        "MAE" : metrics.mean_absolute_error(y_pred=y_pred, y_true=y_true),
+        "MedAE" : metrics.median_absolute_error(y_pred=y_pred, y_true=y_true),
+        "MAPE" : metrics.mean_absolute_percentage_error(y_pred=y_pred, y_true=y_true),
+        "MSE" : metrics.mean_squared_error(y_pred=y_pred, y_true=y_true),
+        "RMSE" : metrics.root_mean_squared_error(y_pred=y_pred, y_true=y_true),
+        # self.stepwise_forecast_errors.loc[fc_day, "MASE"] = MeanAbsoluteScaledError(y_pred=y_pred, y_true=y_true) #MAE/
+        "MaxError" : metrics.max_error(y_pred=y_pred, y_true=y_true)
+        }
+
+
+        self.forecast_errors.loc[fc_col] = error_dict
+
+
+
 
 
 
@@ -1156,12 +1205,12 @@ class ModelArima(Model):
             self.add_to_results_ARIMA(preds, test_start=window[2])
             
             window_end = time.time()
-            #print(f"Window {i} executed in {window_end - window_start}s\n")
+            # print(f"Window {i} executed in {window_end - window_start}s\n")
 
         self.add_stepwise_difference()
         self.get_stepwise_errors()
 
-        print(f"\nTotal time for all windows {window_end - all_windows_start}s")
+        # print(f"\nTotal time for all windows {window_end - all_windows_start}s")
         self.stats["run_duration"] = round(window_end - all_windows_start, ndigits=2) #TODO: move to setter?
 
         self.save_results()
@@ -1768,14 +1817,14 @@ class ModelLSTM(Model):
 
         #Simulate individual past forecasts with windows:
         for i, window in enumerate(self.validation_sets):
-            # print(f"\n\nWindow {i}/{len(self.validation_sets)}")
+            # print(f"Window {i}/{len(self.validation_sets)}")
             
             # print("Loading weights from: ", self.dir_name, " ", self.file_path)
             self.model.load_weights(self.file_path+"/initial.weights.h5")
             
             process = psutil.Process(os.getpid())
-            print(f"Memory: {process.memory_info().rss/1024**2:.2f} MB")
-            print(f"GC Objects: {len(gc.get_objects())}")
+            # print(f"Memory: {process.memory_info().rss/1024**2:.2f} MB")
+            # print(f"GC Objects: {len(gc.get_objects())}")
 
             window_start = time.time()
             
@@ -2016,14 +2065,13 @@ class ModelProphet(Model):
         #create model with (hyper)parameters
         #params are model parameters
         # days are days to predict
-
         self.create_result_dir()
 
         all_windows_start = time.time()
 
 
         for i, window in enumerate(self.validation_sets):
-            # print(f"Window {i}/{len(self.validation_sets)}")
+            # print(f"Window {i}/{len(self.validation_sets)}",flush=True)
             window_start = time.time()
             
             # self.reset_states()
@@ -2037,7 +2085,7 @@ class ModelProphet(Model):
             self.add_to_results()
             window_end = time.time()
             
-            # print(f"Window {i} executed in {window_end - window_start}s\n")
+            # print(f"Window {i} executed in {window_end - window_start}s\n", flush=True)
 
         #TODO: make functions:
         self.add_stepwise_difference()

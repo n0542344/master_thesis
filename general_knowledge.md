@@ -227,3 +227,22 @@ argue why whcih was chosen -- second one, because you can make sure, no data get
 
 note: trend parameter in (s)arima build_model: can be n, c, t, ct. talk about why which was chosen.
 defaults are c or n. n or t is possible, others throw error?
+
+
+# Environments
+
+For deployment reasons, i switched to conda (miniconda3).
+
+IN terminal:
+deactivate all envs 
+deactive
+
+activate conda:
+conda activate thesis_ls 
+oder generell:
+conda activate base 
+
+
+get requirements (only installed modules):
+pipreq --forece . --ignore .venv,notebooks,data,logs,docs,plots,results
+to search all files here (.), and ignore some others (especially notebooks). forece to overwrite exisitng requirements.txt

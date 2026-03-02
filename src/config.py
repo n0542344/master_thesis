@@ -14,6 +14,9 @@ DEV_START_DATE = "2024-05-01"
 DEV_END_DATE = "2025-07-01"
 PRED_COLUMN = "use_transfused"
 
+#For random sampling reproducibility
+SEED = 67
+
 
 # DATE: Mapping of column names with their respective format
 # DONE: change all date formats to iso without time
@@ -125,7 +128,7 @@ wards = {
 
 exog_types = {
     "uses" : ["use_discarded", "use_expired"],
-    "wards" : ['ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC'],
+    #"wards" : ['ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC'],
     "days" : ["workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year"],
     "weather" : ["tlmin", "tlmax"]
 }
@@ -139,7 +142,8 @@ gs_config_arima = {
         
     "train_percent" : arange(0.6, 0.8, 0.1),
     "test_len" : [14],
-    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
+    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2024-02-01", "2024-03-01"]],
+    # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
 
     "p" : list(range(0,7)),
     "d" : list(range(0,3)),
@@ -155,7 +159,8 @@ gs_config_sarimax = {
     
     "train_percent" : arange(0.6, 0.8, 0.1),
     "test_len" : [14],
-    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
+    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2024-02-01", "2024-03-01"]],
+    # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
 
     "p" : [0, 1], #list(range(0,3)),
     "d" : [0, 1], #list(range(0,2)),
@@ -177,7 +182,8 @@ gs_config_lstm = {
     
     "train_percent" : [0.7, 0.8], #list(np.arange(0.6, 0.8, 0.1)), #wouldnt it make more sense to use int of days before to train? like train_days = 365*7 or 730 or something?
     "test_len" : [7, 14],
-    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
+    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2024-02-01", "2024-03-01"]],
+    # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
     # "start_date" : [pd.to_datetime(day) for day in ["2008-01-01", "2012-01-01", "2016-01-01", "2020-01-01", "2024-01-01"]],
     
     "memory_cell" : [32, 64, 128],
@@ -200,7 +206,8 @@ gs_config_prophet = {
     
     "train_percent" : arange(0.6, 0.8, 0.1),
     "test_len" : [14],
-    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
+    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2024-02-01", "2024-03-01"]],
+    # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
 
     "lower_limit" : [2.5],
     "upper_limit" : [97.5]
