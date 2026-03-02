@@ -1,4 +1,5 @@
 #%% MARK: libs etc
+#This needs to be at the top
 import os
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -14,8 +15,6 @@ from datetime import datetime
 from matplotlib import pyplot as plt
 
 import seaborn as sns
-
-
 
 from src import clean
 from src import config
@@ -50,7 +49,7 @@ import resource
 from warnings import filterwarnings
 filterwarnings('ignore')
 
-#turn of prophet log:
+#turn off prophet log:
 prophet_logger = logging.getLogger('cmdstanpy')
 prophet_logger.addHandler(logging.NullHandler())
 prophet_logger.propagate = False
@@ -107,7 +106,6 @@ def run_worker(args):
                 "id" : job_id},
             index=["Day_1"]
         )
-        # traceback.print_exc()
         print("worker returns")
         return (job_id, False, ModelClass.__name__, empty_df) 
 
@@ -118,9 +116,8 @@ def get_start_id(all_jobs):
 def add_model_grid_to_all_jobs(grid, model, df, start_id=0):
     #grid is a df, model a specific modle class, like model.ModelArima
     global_job_id = start_id
-    # global all_jobs
-    # global global_job_id
     jobs = []
+
     for param_set in grid:
         param_set["id"] = global_job_id
         # param_set["id"] = sum(len(v) for v in all_jobs.values()) #consecutive ID across all models
@@ -189,6 +186,7 @@ def main():
         sampled_grid = random.sample(full_grid, min(n_samples, len(full_grid)))
         return sampled_grid
 
+    #Create grids, sample
     full_grid_arima = list(ParameterGrid(config.gs_config_arima))
     full_grid_sarimax = list(ParameterGrid(config.gs_config_sarimax))
     full_grid_lstm = list(ParameterGrid(config.gs_config_lstm))
@@ -197,40 +195,13 @@ def main():
 
 
 
-
-    # all_jobs = [] #TODO: maybe move to top?
-    # global_job_id = 1 #TODO: maybe move to top?
+    #TODO: sample after creating all_jobs to create ids refering to full grid (instead of ids continuous for sampled grid)
     all_jobs = {}
 
     all_jobs["arima"] = add_model_grid_to_all_jobs(full_grid_arima, model.ModelArima, df, get_start_id(all_jobs))
     all_jobs["sarimax"] = add_model_grid_to_all_jobs(full_grid_sarimax, model.ModelSarimax, df, get_start_id(all_jobs))
     all_jobs["lstm"] = add_model_grid_to_all_jobs(sampled_grid_lstm, model.ModelLSTM, df, get_start_id(all_jobs))
     all_jobs["prophet"] = add_model_grid_to_all_jobs(full_grid_prophet, model.ModelProphet, df, get_start_id(all_jobs))
-
-
-    # len_arima = len(full_grid_arima)
-    # len_sarimax = len(full_grid_sarimax)
-    # len_lstm = len(sampled_grid_lstm)
-    # len_prophet = len(full_grid_prophet)
-
-
-    #test model run without worker:
-#     MC, params = all_jobs["prophet"][0]
-#     job_id = all_jobs["prophet"][0][1]["id"]
-#     m = MC(df, id=job_id)
-#     m.set_prediction_column(**params)
-#     if MC.__name__ != "ModelArima":
-#         m.set_exogenous_cols(**params)
-#     m.set_validation_rolling_window(**params)
-#     m.set_model_parameters(**params) 
-#     # logger.info(f"{ModelClass.__name__}/{job_id} Start day {params['start_date'].date()} with {model_instance.stats['window_num']} windows")
-#     print("Get results:", flush=True)
-#     run_results = m.model_run()
-#     # logger.info(f"{ModelClass.__name__}/{job_id} finished in {model_instance.stats['run_duration']}s")
-# c    print("Return:", flush=True)
-#     print(job_id, True, MC.__name__, run_results)
-    
-
 
     # cores = 24#max(1, multiprocessing.cpu_count() - 1)
     # logger.info(f"---Using {cores} cores---")
@@ -260,7 +231,6 @@ def main():
         initargs=(RAM_PER_WORKER,)
     ) as pool:
         result_list_sarimax = pool.map(run_worker, all_jobs["sarimax"][0:5]) #all_jobs["sarimax"][0:8])
-        # result_list_sarimax = pool.map(run_worker, [job for job in all_jobs[len_arima+50:len_arima+54]]) #all_jobs[0:8])
 
     valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
     final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
@@ -275,26 +245,17 @@ def main():
         initargs=(RAM_PER_WORKER,)
     ) as pool:
         try:
-            result_list_prophet = pool.map(run_worker, all_jobs["prophet"][0:5]) #all_jobs["sarimax"][0:8])
+            result_list_prophet = pool.map(run_worker, all_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
         except Exception as e:
             print(f"Model run Prophet failed: {e}", flush=True)
             traceback.print_exc()
-        result_list_prophet = pool.map(run_worker, all_jobs["prophet"][0:2]) #all_jobs["sarimax"][0:8])
-        # result = pool.map_async(run_worker, all_jobs["prophet"][0:1]) #all_jobs["sarimax"][0:8])
-        # result_list_prophet = result.get(timeout=240)
+        result_list_prophet = pool.map(run_worker, all_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
+
     print("finished with prophet, getting results")
     valid_results_prophet = [res[3] for res in result_list_prophet if res is not None]
     final_result_df_prophet = pd.concat(valid_results_prophet).set_index("id")
     final_result_df_prophet.to_csv("./results/Prophet/grid_search_results.csv")
 
-    #single run without multiprocessing, for testing:
-    # prophet_test_config = all_jobs["prophet"][0][1]
-    # m_prophet = model.ModelProphet(df)
-    # m_prophet.set_validation_rolling_window(**prophet_test_config)
-    # m_prophet.set_model_parameters(**prophet_test_config)
-    # m_prophet.set_exogenous_cols(**prophet_test_config)
-    # m_prophet.set_prediction_column(**prophet_test_config)
-    # m_prophet.model_run()
     logger.info("---Finished Prophet---")
     
     
@@ -306,7 +267,7 @@ def main():
     ) as pool:
         # result_list_lstm = pool.map(run_worker, all_jobs["lstm"][0:5]) #all_jobs["sarimax"][0:8])
         try:
-            result_list_lstm = pool.map(run_worker, all_jobs["lstm"][0:5]) #all_jobs["sarimax"][0:8])
+            result_list_lstm = pool.map(run_worker, all_jobs["lstm"][0:10]) #all_jobs["sarimax"][0:8])
         except Exception as e:
             print(e)
 
@@ -324,8 +285,6 @@ if __name__ == "__main__":
     main()
 
 
-#%%
-print("done?")
 
 #%%
 # m_prophet = model.ModelProphet(df)
