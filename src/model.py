@@ -1817,7 +1817,7 @@ class ModelLSTM(Model):
 
         #Simulate individual past forecasts with windows:
         for i, window in enumerate(self.validation_sets):
-            # print(f"Window {i}/{len(self.validation_sets)}")
+            print(f"Window {i}/{len(self.validation_sets)}")
             
             # print("Loading weights from: ", self.dir_name, " ", self.file_path)
             self.model.load_weights(self.file_path+"/initial.weights.h5")
@@ -2126,6 +2126,10 @@ class ModelProphet(Model):
                               .reset_index()
                               .rename(columns={"date":"ds", self.model_params["prediction_column"]:"y"})
                               )
+        dupes = self.prophet_train[self.prophet_train.duplicated(subset="ds")]
+        if not dupes.empty:
+            print(f"Warning: {len(dupes)} duplicate dates found in job {self.stats['id']}", flush=True)
+        self.prophet_train = self.prophet_train.drop_duplicates(subset="ds")
 
       
     def build_model(self):

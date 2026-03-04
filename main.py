@@ -5,6 +5,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["STAN_NUM_THREADS"] = "1"
+#Set LSTM (tensorflow) threads
+os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 
 
 import pandas as pd
@@ -60,7 +63,7 @@ RUN_ALL = False
 RUN_DATE = datetime.today().strftime('%Y%m%d-%H_%M')
 
 TOTAL_CORES = 12
-TOTAL_RAM_GB = 10
+TOTAL_RAM_GB = 48
 RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
 
 
@@ -70,11 +73,9 @@ def run_worker(args):
     gc.collect()
 
     #limit_memory(3.3) 
-    print("Worker started")
-
     ModelClass, params, df = args
     job_id = params.get("id")
-    print(job_id, flush=True)
+    print(f"{job_id} -- worker started", flush=True)
     # logger = logging.getLogger(__name__)
     # logger.info(f"Worker {ModelClass.__name__}/{job_id} started")
 
@@ -94,6 +95,8 @@ def run_worker(args):
     except Exception as e:
         print("Got an error: ", flush=True)
         print(f"Error in {ModelClass.__name__}: {job_id}: {e}", flush=True)
+        traceback.print_exc()
+
         empty_df = pd.DataFrame(
             data={
                 "ME": None, 
@@ -106,7 +109,7 @@ def run_worker(args):
                 "id" : job_id},
             index=["Day_1"]
         )
-        print("worker returns")
+        print(f"{job_id} -- worker returns")
         return (job_id, False, ModelClass.__name__, empty_df) 
 
 
@@ -217,7 +220,7 @@ def main():
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
     ) as pool:
-        result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:100])
+        result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:1])
 
     valid_results_arima = [res[3] for res in result_list_arima if res is not None]
     final_result_df_arima = pd.concat(valid_results_arima).set_index("id")
@@ -233,7 +236,7 @@ def main():
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
     ) as pool:
-        result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:100]) #all_jobs["sarimax"][0:8])
+        result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:1]) #all_jobs["sarimax"][0:8])
 
     valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
     final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
@@ -248,10 +251,10 @@ def main():
         initargs=(RAM_PER_WORKER,)
     ) as pool:
         try:
-            result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
+            result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:16]) #all_jobs["sarimax"][0:8])
         except Exception as e:
             print(f"Model run Prophet failed: {e}", flush=True)
-            traceback.print_exc()
+            # traceback.print_exc()
         # result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
 
     print("finished with prophet, getting results")
@@ -263,16 +266,17 @@ def main():
     
     
     logger.info("Starting LSTM")
+    logger.info("Set thread cores to 4")
     with multiprocessing.Pool(
-        processes=TOTAL_CORES, 
+        processes=4, 
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
     ) as pool:
         # result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:5]) #all_jobs["sarimax"][0:8])
         try:
-            result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:12]) #all_jobs["sarimax"][0:8])
+            result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:2]) #all_jobs["sarimax"][0:8])
         except Exception as e:
-            print(e)
+            print(f"--LSTM failed--: {e}")
 
     valid_results_lstm = [res[3] for res in result_list_lstm if res is not None]
     final_result_df_lstm = pd.concat(valid_results_lstm).set_index("id")

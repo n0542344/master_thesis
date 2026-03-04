@@ -4,10 +4,10 @@
 SSH_CONFIG="bioinf02"   # used as: ssh bioinf02
 SERVER_PATH="~/Desktop/2025-Master-Thesis/thesis_code"
 LOCAL_PATH="."           # run this script from your project root
-DATE=$(+%Y%m%d%H%M%S)
+DATE=$(date '+%Y%m%d%H%M%S')
 # ── Generate requirements.txt ────────────────────────────────────────────────
 echo "Generating requirements.txt with pipreqs..."
-mv requirements.txt requirements.txt.bak.${DATE}
+mv requirements.txt requirements${DATE}.txt.bak
 pipreqs --force "$LOCAL_PATH" \
     --ignore .venv,notebooks,data,logs,docs,plots,results
 echo "Done: requirements.txt"
