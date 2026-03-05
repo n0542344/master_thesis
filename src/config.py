@@ -189,7 +189,7 @@ gs_config_lstm = {
     "memory_cell" : [32, 64, 128],
     "epochs" : [20, 100],
     "batch_size" : [32],
-    "pi_iterations" : [100, 1000],
+    "pi_iterations" : [100, 200],
     "optimizer" : ["adam"],
     "loss" : ["mean_squared_error", "mean_absolute_error", "mean_squared_logarithmic_error"], #see description here:https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/
 

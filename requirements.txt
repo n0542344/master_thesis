@@ -2,10 +2,10 @@ calplot==0.1.7.5
 dayplot==0.5.1
 holidays==0.83
 #holidays==0.91
-keras==3.12.0
+#keras==3.12.0
 matplotlib==3.10.8
 multiprocessing_logging==0.3.4
-numpy==2.4.2
+#numpy==2.4.2
 #pandas==3.0.1
 pandas==2.3.3 #!Imortant for prophet to run!
 prophet==1.2.1
@@ -14,4 +14,5 @@ psutil==7.2.2
 scikit_learn==1.8.0
 seaborn==0.13.2
 statsmodels==0.14.6
-tensorflow==2.20.0
+tensorflow==2.15.1
+# tensorflow==2.20.0

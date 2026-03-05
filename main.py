@@ -6,9 +6,10 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["STAN_NUM_THREADS"] = "1"
 #Set LSTM (tensorflow) threads
-os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
-os.environ["TF_NUM_INTEROP_THREADS"] = "1"
-
+# os.environ["TF_DISABLE_MKL"] = "1"
+# os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+# os.environ["TF_NUM_INTEROP_THREADS"] = "1"
+# os.environ["TF_DATA_EXPERIMENTAL_DISABLE_THREADING"] = "1"
 
 import pandas as pd
 import numpy as np
@@ -62,8 +63,8 @@ prophet_logger.setLevel(logging.CRITICAL)
 RUN_ALL = False
 RUN_DATE = datetime.today().strftime('%Y%m%d-%H_%M')
 
-TOTAL_CORES = 12
-TOTAL_RAM_GB = 48
+TOTAL_CORES = 4
+TOTAL_RAM_GB = 10
 RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
 
 
@@ -133,6 +134,16 @@ def initialize_worker(mem_limit_gb):
     """This runs once inside every one of the 24 worker processes."""
     # 1. Set RAM Limit (per worker)
     # RLIMIT_AS is 'Address Space' - the total memory the process can seize
+    # import os
+    # os.environ["TF_DISABLE_MKL"] = "1"
+    # os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+    # os.environ["TF_NUM_INTEROP_THREADS"] = "1"
+    # os.environ["TF_DATA_EXPERIMENTAL_DISABLE_THREADING"] = "1"
+    
+    # import tensorflow as tf
+    # tf.config.threading.set_intra_op_parallelism_threads(1)
+    # tf.config.threading.set_inter_op_parallelism_threads(1)
+
     limit_bytes = int(mem_limit_gb * 1024 * 1024 * 1024)
     resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
 
@@ -144,7 +155,7 @@ def limit_memory(maxsize_gb):
 
 
 def main():
-    multiprocessing.set_start_method("spawn", force=True) #use spawn instead of sub-processes
+    # multiprocessing.set_start_method("spawn", force=True) #use spawn instead of sub-processes
 
     log_file = f"./logs/pipeline_{RUN_DATE}.log"
     formatter = logging.Formatter('%(asctime)s [%(processName)s] [%(levelname)s] %(message)s')
@@ -215,7 +226,9 @@ def main():
 
 
     # logger.info("Starting ARIMA")
-    with multiprocessing.Pool(
+    spawn_ctx = multiprocessing.get_context("spawn")
+    with spawn_ctx.Pool(
+    # with multiprocessing.Pool(
         processes=TOTAL_CORES, 
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
@@ -231,7 +244,8 @@ def main():
     #------Run models (with multiprocessing) --------
 
     logger.info("Starting SARIMAX")
-    with multiprocessing.Pool(
+    with spawn_ctx.Pool(
+    # with multiprocessing.Pool(
         processes=TOTAL_CORES, 
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
@@ -245,13 +259,14 @@ def main():
 
 
     logger.info("Starting Prophet")
-    with multiprocessing.Pool(
+    with spawn_ctx.Pool(
+    # with multiprocessing.Pool(
         processes=TOTAL_CORES, 
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
     ) as pool:
         try:
-            result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:16]) #all_jobs["sarimax"][0:8])
+            result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:1]) #all_jobs["sarimax"][0:8])
         except Exception as e:
             print(f"Model run Prophet failed: {e}", flush=True)
             # traceback.print_exc()
@@ -265,9 +280,21 @@ def main():
     logger.info("---Finished Prophet---")
     
     
+    # logger.info("Starting LSTM without mp")
+    # m_lstm = model.ModelLSTM(df)
+    # m_lstm.set_validation_rolling_window(**sampled_jobs["lstm"][1][1])
+    # m_lstm.set_model_parameters(**sampled_jobs["lstm"][1][1])
+    # m_lstm.set_exogenous_cols(**sampled_jobs["lstm"][1][1])
+    # m_lstm.set_prediction_column(**sampled_jobs["lstm"][1][1])
+    # m_lstm.model_run()
+
+
+
     logger.info("Starting LSTM")
     logger.info("Set thread cores to 4")
-    with multiprocessing.Pool(
+    fork_ctx = multiprocessing.get_context("fork")
+    with fork_ctx.Pool(
+    # with multiprocessing.Pool(
         processes=4, 
         initializer=initialize_worker, 
         initargs=(RAM_PER_WORKER,)
