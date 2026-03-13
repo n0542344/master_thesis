@@ -1,16 +1,17 @@
 #__ MARK: libs etc
 #This needs to be at the top
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["STAN_NUM_THREADS"] = "1"
+import argparse #to run different python files for lstm
 #Set LSTM (tensorflow) threads
 # os.environ["TF_DISABLE_MKL"] = "1"
 # os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
 # os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 # os.environ["TF_DATA_EXPERIMENTAL_DISABLE_THREADING"] = "1"
 
+#Limit cores per tensorflow python process
+os.environ["OMP_NUM_THREADS"] = "4"      # change to however many you want
+os.environ["TF_NUM_INTRAOP_THREADS"] = "4"
+os.environ["TF_NUM_INTEROP_THREADS"] = "4"
 import pandas as pd
 import numpy as np
 from numpy import nan
@@ -112,7 +113,25 @@ def run_worker(args):
         )
         print(f"{job_id} -- worker returns")
         return (job_id, False, ModelClass.__name__, empty_df) 
+    
 
+def run_lstm_chunk(jobs, chunk, total_chunks):
+    
+    """Run a subset of LSTM jobs sequentially — no multiprocessing needed."""
+    chunk_size = len(jobs) // total_chunks
+    start = chunk * chunk_size
+    # last chunk gets any remainder
+    end = start + chunk_size if chunk < total_chunks - 1 else len(jobs)
+    chunk_jobs = jobs[start:end]
+
+    print(f"LSTM chunk {chunk}/{total_chunks-1}: jobs {start}-{end-1} ({len(chunk_jobs)} total)", flush=True)
+
+    results = []
+    for job in chunk_jobs:
+        result = run_worker(job)
+        if result is not None:
+            results.append(result)
+    return results
 
 def get_start_id(all_jobs):
     return sum(len(v) for v in all_jobs.values())
@@ -132,18 +151,6 @@ def add_model_grid_to_all_jobs(grid, model, df, start_id=0):
 
 def initialize_worker(mem_limit_gb):
     """This runs once inside every one of the 24 worker processes."""
-    # 1. Set RAM Limit (per worker)
-    # RLIMIT_AS is 'Address Space' - the total memory the process can seize
-    # import os
-    # os.environ["TF_DISABLE_MKL"] = "1"
-    # os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
-    # os.environ["TF_NUM_INTEROP_THREADS"] = "1"
-    # os.environ["TF_DATA_EXPERIMENTAL_DISABLE_THREADING"] = "1"
-    
-    # import tensorflow as tf
-    # tf.config.threading.set_intra_op_parallelism_threads(1)
-    # tf.config.threading.set_inter_op_parallelism_threads(1)
-
     limit_bytes = int(mem_limit_gb * 1024 * 1024 * 1024)
     resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
 
@@ -156,6 +163,17 @@ def limit_memory(maxsize_gb):
 
 def main():
     # multiprocessing.set_start_method("spawn", force=True) #use spawn instead of sub-processes
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, default=None,
+                        help="Which model to run: arima, sarimax, prophet, lstm. Omit to run all.")
+    parser.add_argument("--chunk", type=int, default=0,
+                        help="Chunk index (0-based)")
+    parser.add_argument("--total_chunks", type=int, default=1,
+                        help="Total chunks to split LSTM jobs into")
+    args = parser.parse_args()
+
+
 
     log_file = f"./logs/pipeline_{RUN_DATE}.log"
     formatter = logging.Formatter('%(asctime)s [%(processName)s] [%(levelname)s] %(message)s')
@@ -226,58 +244,61 @@ def main():
 
 
     # logger.info("Starting ARIMA")
-    spawn_ctx = multiprocessing.get_context("spawn")
-    with spawn_ctx.Pool(
-    # with multiprocessing.Pool(
-        processes=TOTAL_CORES, 
-        initializer=initialize_worker, 
-        initargs=(RAM_PER_WORKER,)
-    ) as pool:
-        result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:1])
+    if args.model in (None, "arima"):
+        logger.info("Starting SARIMAX")
+        spawn_ctx = multiprocessing.get_context("spawn")
+        with spawn_ctx.Pool(
+        # with multiprocessing.Pool(
+            processes=TOTAL_CORES, 
+            initializer=initialize_worker, 
+            initargs=(RAM_PER_WORKER,)
+        ) as pool:
+            result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:1])
 
-    valid_results_arima = [res[3] for res in result_list_arima if res is not None]
-    final_result_df_arima = pd.concat(valid_results_arima).set_index("id")
-    final_result_df_arima.to_csv("./results/Arima/grid_search_results.csv")
-    logger.info("---Finished ARIMA---")
+        valid_results_arima = [res[3] for res in result_list_arima if res is not None]
+        final_result_df_arima = pd.concat(valid_results_arima).set_index("id")
+        final_result_df_arima.to_csv("./results/Arima/grid_search_results.csv")
+        logger.info("---Finished ARIMA---")
 
 
     #------Run models (with multiprocessing) --------
 
-    logger.info("Starting SARIMAX")
-    with spawn_ctx.Pool(
-    # with multiprocessing.Pool(
-        processes=TOTAL_CORES, 
-        initializer=initialize_worker, 
-        initargs=(RAM_PER_WORKER,)
-    ) as pool:
-        result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:1]) #all_jobs["sarimax"][0:8])
+    if args.model in (None, "sarimax"):
+        logger.info("Starting SARIMAX")
+        with spawn_ctx.Pool(
+        # with multiprocessing.Pool(
+            processes=TOTAL_CORES, 
+            initializer=initialize_worker, 
+            initargs=(RAM_PER_WORKER,)
+        ) as pool:
+            result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:1]) #all_jobs["sarimax"][0:8])
 
-    valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
-    final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
-    final_result_df_sarimax.to_csv("./results/Sarimax/grid_search_results.csv")
-    logger.info("---Finished SARIMAX---")
+        valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
+        final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
+        final_result_df_sarimax.to_csv("./results/Sarimax/grid_search_results.csv")
+        logger.info("---Finished SARIMAX---")
 
+    if args.model in (None, "prophet"):
+        logger.info("Starting Prophet")
+        with spawn_ctx.Pool(
+        # with multiprocessing.Pool(
+            processes=TOTAL_CORES, 
+            initializer=initialize_worker, 
+            initargs=(RAM_PER_WORKER,)
+        ) as pool:
+            try:
+                result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:1]) #all_jobs["sarimax"][0:8])
+            except Exception as e:
+                print(f"Model run Prophet failed: {e}", flush=True)
+                # traceback.print_exc()
+            # result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
 
-    logger.info("Starting Prophet")
-    with spawn_ctx.Pool(
-    # with multiprocessing.Pool(
-        processes=TOTAL_CORES, 
-        initializer=initialize_worker, 
-        initargs=(RAM_PER_WORKER,)
-    ) as pool:
-        try:
-            result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:1]) #all_jobs["sarimax"][0:8])
-        except Exception as e:
-            print(f"Model run Prophet failed: {e}", flush=True)
-            # traceback.print_exc()
-        # result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
+        print("finished with prophet, getting results")
+        valid_results_prophet = [res[3] for res in result_list_prophet if res is not None]
+        final_result_df_prophet = pd.concat(valid_results_prophet).set_index("id")
+        final_result_df_prophet.to_csv("./results/Prophet/grid_search_results.csv")
 
-    print("finished with prophet, getting results")
-    valid_results_prophet = [res[3] for res in result_list_prophet if res is not None]
-    final_result_df_prophet = pd.concat(valid_results_prophet).set_index("id")
-    final_result_df_prophet.to_csv("./results/Prophet/grid_search_results.csv")
-
-    logger.info("---Finished Prophet---")
+        logger.info("---Finished Prophet---")
     
     
     # logger.info("Starting LSTM without mp")
@@ -290,28 +311,45 @@ def main():
 
 
 
-    logger.info("Starting LSTM")
-    logger.info("Set thread cores to 4")
-    fork_ctx = multiprocessing.get_context("fork")
-    with fork_ctx.Pool(
-    # with multiprocessing.Pool(
-        processes=4, 
-        initializer=initialize_worker, 
-        initargs=(RAM_PER_WORKER,)
-    ) as pool:
-        # result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:5]) #all_jobs["sarimax"][0:8])
-        try:
-            result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:2]) #all_jobs["sarimax"][0:8])
-        except Exception as e:
-            print(f"--LSTM failed--: {e}")
+    # logger.info("Starting LSTM")
+    # logger.info("Set thread cores to 4")
+    # fork_ctx = multiprocessing.get_context("fork")
+    # with fork_ctx.Pool(
+    # # with multiprocessing.Pool(
+    #     processes=1, 
+    #     initializer=initialize_worker, 
+    #     initargs=(RAM_PER_WORKER,)
+    # ) as pool:
+    #     # result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:5]) #all_jobs["sarimax"][0:8])
+    #     try:
+    #         result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:1]) #all_jobs["sarimax"][0:8])
+    #     except Exception as e:
+    #         print(f"--LSTM failed--: {e}")
 
-    valid_results_lstm = [res[3] for res in result_list_lstm if res is not None]
-    final_result_df_lstm = pd.concat(valid_results_lstm).set_index("id")
-    final_result_df_lstm.to_csv("./results/LSTM/grid_search_results.csv")
-    logger.info("---Finished LSTM---")
+    # valid_results_lstm = [res[3] for res in result_list_lstm if res is not None]
+    # final_result_df_lstm = pd.concat(valid_results_lstm).set_index("id")
+    # final_result_df_lstm.to_csv("./results/LSTM/grid_search_results.csv")
+    # logger.info("---Finished LSTM---")
 
 
-    logger.info("Finished Running the pipeline")
+    # logger.info("Finished Running the pipeline")
+
+    if args.model in (None, "lstm"):
+        logger.info(f"Starting LSTM chunk {args.chunk}/{args.total_chunks-1}")
+        result_list_lstm = run_lstm_chunk(
+            sampled_jobs["lstm"],
+            args.chunk,
+            args.total_chunks
+        )
+        valid_results_lstm = [res[3] for res in result_list_lstm if res is not None]
+        if valid_results_lstm:
+            final_result_df_lstm = pd.concat(valid_results_lstm).set_index("id")
+            out_path = f"./results/LSTM/grid_search_results_chunk_{args.chunk}.csv"
+            final_result_df_lstm.to_csv(out_path)
+            logger.info(f"---Finished LSTM chunk {args.chunk}, saved to {out_path}---")
+        else:
+            logger.warning(f"LSTM chunk {args.chunk} produced no valid results")
+
 
 
 #__
