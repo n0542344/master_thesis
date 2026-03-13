@@ -2,7 +2,7 @@
 
 #Created with claude
 # ── Configuration ────────────────────────────────────────────────────────────
-TOTAL_CHUNKS=2 #20         # one per core, adjust to available cores
+TOTAL_CHUNKS=10 #20         # one per core, adjust to available cores
 RAM_PER_CHUNK=4 #in GB
 PYTHON="python3.11"        # adjust if needed, e.g. python3.11
 SCRIPT="main.py"

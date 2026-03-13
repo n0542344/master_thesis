@@ -240,7 +240,7 @@ def main():
 
     #Sample jobs now, to still have continuous global ids
     sampled_jobs = all_jobs
-    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=2)
+    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=10)
     
     # cores = 24#max(1, multiprocessing.cpu_count() - 1)
     # logger.info(f"---Using {cores} cores---")
@@ -258,7 +258,7 @@ def main():
             initializer=initialize_worker, 
             initargs=(RAM_PER_WORKER,)
         ) as pool:
-            result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:8])
+            result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:100])
 
         valid_results_arima = [res[3] for res in result_list_arima if res is not None]
         final_result_df_arima = pd.concat(valid_results_arima).set_index("id")
@@ -275,7 +275,7 @@ def main():
             initializer=initialize_worker, 
             initargs=(RAM_PER_WORKER,)
         ) as pool:
-            result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:8]) #all_jobs["sarimax"][0:8])
+            result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:100]) #all_jobs["sarimax"][0:8])
 
         valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
         final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
@@ -291,7 +291,7 @@ def main():
             initargs=(RAM_PER_WORKER,)
         ) as pool:
             try:
-                result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:8]) #all_jobs["sarimax"][0:8])
+                result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
             except Exception as e:
                 print(f"Model run Prophet failed: {e}", flush=True)
                 # traceback.print_exc()
