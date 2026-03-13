@@ -12,6 +12,10 @@ import argparse #to run different python files for lstm
 os.environ["OMP_NUM_THREADS"] = "4"      # change to however many you want
 os.environ["TF_NUM_INTRAOP_THREADS"] = "4"
 os.environ["TF_NUM_INTEROP_THREADS"] = "4"
+#ignore/suppress keras logs:
+os.environ["KERAS_VERBOSE"] = "0"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import pandas as pd
 import numpy as np
 from numpy import nan
@@ -236,24 +240,25 @@ def main():
 
     #Sample jobs now, to still have continuous global ids
     sampled_jobs = all_jobs
-    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=30)
+    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=2)
     
     # cores = 24#max(1, multiprocessing.cpu_count() - 1)
     # logger.info(f"---Using {cores} cores---")
     logger.info(f"---Using {TOTAL_CORES} cores with max {TOTAL_RAM_GB} GB RAM---")
 
 
-    # logger.info("Starting ARIMA")
+    #------Run models (with multiprocessing) --------
+    spawn_ctx = multiprocessing.get_context("spawn")
+
     if args.model in (None, "arima"):
-        logger.info("Starting SARIMAX")
-        spawn_ctx = multiprocessing.get_context("spawn")
+        logger.info("---Starting ARIMA---")
         with spawn_ctx.Pool(
         # with multiprocessing.Pool(
             processes=TOTAL_CORES, 
             initializer=initialize_worker, 
             initargs=(RAM_PER_WORKER,)
         ) as pool:
-            result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:1])
+            result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:8])
 
         valid_results_arima = [res[3] for res in result_list_arima if res is not None]
         final_result_df_arima = pd.concat(valid_results_arima).set_index("id")
@@ -261,17 +266,16 @@ def main():
         logger.info("---Finished ARIMA---")
 
 
-    #------Run models (with multiprocessing) --------
 
     if args.model in (None, "sarimax"):
-        logger.info("Starting SARIMAX")
+        logger.info("---Starting SARIMAX---")
         with spawn_ctx.Pool(
         # with multiprocessing.Pool(
             processes=TOTAL_CORES, 
             initializer=initialize_worker, 
             initargs=(RAM_PER_WORKER,)
         ) as pool:
-            result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:1]) #all_jobs["sarimax"][0:8])
+            result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:8]) #all_jobs["sarimax"][0:8])
 
         valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
         final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
@@ -279,7 +283,7 @@ def main():
         logger.info("---Finished SARIMAX---")
 
     if args.model in (None, "prophet"):
-        logger.info("Starting Prophet")
+        logger.info("---Starting Prophet---")
         with spawn_ctx.Pool(
         # with multiprocessing.Pool(
             processes=TOTAL_CORES, 
@@ -287,7 +291,7 @@ def main():
             initargs=(RAM_PER_WORKER,)
         ) as pool:
             try:
-                result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:1]) #all_jobs["sarimax"][0:8])
+                result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:8]) #all_jobs["sarimax"][0:8])
             except Exception as e:
                 print(f"Model run Prophet failed: {e}", flush=True)
                 # traceback.print_exc()
@@ -334,8 +338,8 @@ def main():
 
     # logger.info("Finished Running the pipeline")
 
-    if args.model in (None, "lstm"):
-        logger.info(f"Starting LSTM chunk {args.chunk}/{args.total_chunks-1}")
+    if args.model in ("lstm"):
+        logger.info(f"---Starting LSTM chunk {args.chunk}/{args.total_chunks-1}---")
         result_list_lstm = run_lstm_chunk(
             sampled_jobs["lstm"],
             args.chunk,

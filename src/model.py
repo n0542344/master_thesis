@@ -47,9 +47,9 @@ def timeout_handler(signum, frame):
 
 #delete:
 # tf.debugging.set_log_device_placement(True)
-num_cores = 6
-tf.config.threading.set_intra_op_parallelism_threads(num_cores)
-tf.config.threading.set_inter_op_parallelism_threads(num_cores)
+# num_cores = 6
+# tf.config.threading.set_intra_op_parallelism_threads(num_cores)
+# tf.config.threading.set_inter_op_parallelism_threads(num_cores)
 
 
 
@@ -1825,12 +1825,15 @@ class ModelLSTM(Model):
         self.scale_data()
         self.get_training_test_set()
         self.build_model()
+        
+        print(f"\nRunning {self.stats['id']} with {len(self.validation_sets)} windows", flush=True)
+        print(f"Calculating {self.model_params['epochs']} epochs")
+        print(f"Loading weights from: {self.dir_name}, {self.file_path}", flush=True)
 
         #Simulate individual past forecasts with windows:
         for i, window in enumerate(self.validation_sets):
-            print(f"Window {i}/{len(self.validation_sets)}", flush=True)
+            print(f"({self.stats['id']})Window {i}/{len(self.validation_sets)}", flush=True)
             
-            print(f"Loading weights from: {self.dir_name}, {self.file_path}", flush=True)
             self.model.load_weights(self.file_path+"/initial.weights.h5")#, skip_mismatch=True, by_name=False)
             
             process = psutil.Process(os.getpid())
@@ -1839,31 +1842,21 @@ class ModelLSTM(Model):
 
             window_start = time.time()
             
-            print("reset_states():", flush=True)
             self.reset_states()
 
-            print("get_start_end_days()", flush=True)
             self.get_start_end_days(window)
-            print("get_data()", flush=True)
             self.get_data() #get X_raw, y_raw data for every iteration in the sliding7expanding window (correct columns)
-            print("scale_data()", flush=True)
             self.scale_data()  #set scaler + transform to scaled data
-            print("get_training_test_set():", flush=True)
             self.get_training_test_set()
-            print("fit_model():", flush=True)
             self.fit_model() #train model 
-            print("get_prediction_intervalls():", flush=True)
             self.get_prediction_intervalls() #iterations for prediction intervall
-            print("add_to_results():", flush=True)
             self.add_to_results()
             
             window_end = time.time()
             # print(f"Window {i} executed in {window_end - window_start}s\n")
 
 
-        print("add_stepwise_difference():", flush=True)
         self.add_stepwise_difference()
-        print("get_stepwise_error():", flush=True)
         self.get_stepwise_errors()
 
         print(f"\nTotal time for all windows {window_end - all_windows_start}s", flush=True)
@@ -1973,7 +1966,6 @@ class ModelLSTM(Model):
     
     @timer_func
     def fit_model(self):
-        print("inside fit_model, setting x/y train:", flush=True)
         x_train = self.X_train.astype('float32')
         y_train = self.y_train.astype('float32')
 
@@ -1981,13 +1973,12 @@ class ModelLSTM(Model):
         signal.alarm(120)  # 2 minute timeout
     
         try:
-            print("Inside try for fit_model", flush=True)
             self.model.fit(
                 x=self.X_train, 
                 y=self.y_train, 
                 epochs=self.model_params["epochs"], 
-                batch_size=self.model_params["batch_size"] 
-                # verbose=1 #not available in tf2.15
+                batch_size=self.model_params["batch_size"], 
+                verbose=0
             )
         finally:
             signal.alarm(0)
@@ -2010,8 +2001,8 @@ class ModelLSTM(Model):
         #Change to keep training set to true, which keeps the dropout layer necessary for MC (pred intervalls)
         preds = self.model(
             x_tiled, 
-            training=True 
-            # verbose=0 #Not available in tf2.15
+            training=True, 
+            verbose=0
             ).numpy()
 
         # Reshape back to (iterations, samples, forecast_days)
