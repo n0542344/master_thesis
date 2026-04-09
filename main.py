@@ -13,6 +13,7 @@ import argparse #to run different python files for lstm
 os.environ["OMP_NUM_THREADS"] = "4"      # change to however many you want
 os.environ["TF_NUM_INTRAOP_THREADS"] = "4"
 os.environ["TF_NUM_INTEROP_THREADS"] = "4"
+
 #ignore/suppress keras logs:
 os.environ["KERAS_VERBOSE"] = "0"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -276,7 +277,7 @@ def main():
             initializer=initialize_worker, 
             initargs=(config.RAM_PER_WORKER,)
         ) as pool:
-            result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:100]) #all_jobs["sarimax"][0:8])
+            result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"])# [0:100]) #to take subset
 
         valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
         final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
@@ -292,7 +293,7 @@ def main():
             initargs=(config.RAM_PER_WORKER,)
         ) as pool:
             try:
-                result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
+                result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"])#[0:100]) #to take subset
             except Exception as e:
                 print(f"Model run Prophet failed: {e}", flush=True)
                 # traceback.print_exc()
@@ -356,9 +357,17 @@ def main():
             logger.warning(f"LSTM chunk {args.chunk} produced no valid results")
 
 
+def process_raw_data():
+    """processes raw data to clean->transform and saves it in file in dir.
+    No return value"""
+
+
+
+
 
 #__
 if __name__ == "__main__":
+    process_raw_data()
     main()
 
 
