@@ -2,6 +2,8 @@
 import pandas as pd
 from numpy import arange
 from time import time
+from datetime import datetime
+
 
 from src import config_utils
 
@@ -16,6 +18,12 @@ PRED_COLUMN = "use_transfused"
 
 #For random sampling reproducibility
 SEED = 67
+
+#Settings for multiprocessing
+TOTAL_CORES = 4
+TOTAL_RAM_GB = 10
+RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
+
 
 
 # DATE: Mapping of column names with their respective format
@@ -197,7 +205,7 @@ gs_config_lstm = {
     "upper_limit" : [97.5]
 }
 
-
+lstm_n_samples = 500
 
 gs_config_prophet = {
     "prediction_column" : [PRED_COLUMN],

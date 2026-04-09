@@ -9,6 +9,7 @@ import argparse #to run different python files for lstm
 # os.environ["TF_DATA_EXPERIMENTAL_DISABLE_THREADING"] = "1"
 
 #Limit cores per tensorflow python process
+#TODO: Still necessary after changing to different python files for concurrent running?
 os.environ["OMP_NUM_THREADS"] = "4"      # change to however many you want
 os.environ["TF_NUM_INTRAOP_THREADS"] = "4"
 os.environ["TF_NUM_INTEROP_THREADS"] = "4"
@@ -68,9 +69,9 @@ prophet_logger.setLevel(logging.CRITICAL)
 RUN_ALL = False
 RUN_DATE = datetime.today().strftime('%Y%m%d-%H_%M')
 
-TOTAL_CORES = 4
-TOTAL_RAM_GB = 10
-RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
+# TOTAL_CORES = 4
+# TOTAL_RAM_GB = 10
+# RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
 
 
 #__
@@ -197,7 +198,7 @@ def main():
 
     install_mp_handler()
     logger = logging.getLogger(__name__)
-    logger.info(f"Starting pool: {TOTAL_CORES} workers, {RAM_PER_WORKER:.2f}GB each.")
+    logger.info(f"Starting pool: {config.TOTAL_CORES} workers, {config.RAM_PER_WORKER:.2f}GB each.")
 
 
     df_processed = pd.read_csv("./data/03_transformed/output_transformed.csv", index_col="date", parse_dates=True)
@@ -240,11 +241,11 @@ def main():
 
     #Sample jobs now, to still have continuous global ids
     sampled_jobs = all_jobs
-    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=10)
+    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=config.lstm_n_samples)
     
     # cores = 24#max(1, multiprocessing.cpu_count() - 1)
     # logger.info(f"---Using {cores} cores---")
-    logger.info(f"---Using {TOTAL_CORES} cores with max {TOTAL_RAM_GB} GB RAM---")
+    logger.info(f"---Using {config.TOTAL_CORES} cores with max {config.TOTAL_RAM_GB} GB RAM---")
 
 
     #------Run models (with multiprocessing) --------
@@ -254,9 +255,9 @@ def main():
         logger.info("---Starting ARIMA---")
         with spawn_ctx.Pool(
         # with multiprocessing.Pool(
-            processes=TOTAL_CORES, 
+            processes=config.TOTAL_CORES, 
             initializer=initialize_worker, 
-            initargs=(RAM_PER_WORKER,)
+            initargs=(config.RAM_PER_WORKER,)
         ) as pool:
             result_list_arima = pool.map(run_worker, sampled_jobs["arima"][0:100])
 
@@ -271,9 +272,9 @@ def main():
         logger.info("---Starting SARIMAX---")
         with spawn_ctx.Pool(
         # with multiprocessing.Pool(
-            processes=TOTAL_CORES, 
+            processes=config.TOTAL_CORES, 
             initializer=initialize_worker, 
-            initargs=(RAM_PER_WORKER,)
+            initargs=(config.RAM_PER_WORKER,)
         ) as pool:
             result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"][0:100]) #all_jobs["sarimax"][0:8])
 
@@ -286,9 +287,9 @@ def main():
         logger.info("---Starting Prophet---")
         with spawn_ctx.Pool(
         # with multiprocessing.Pool(
-            processes=TOTAL_CORES, 
+            processes=config.TOTAL_CORES, 
             initializer=initialize_worker, 
-            initargs=(RAM_PER_WORKER,)
+            initargs=(config.RAM_PER_WORKER,)
         ) as pool:
             try:
                 result_list_prophet = pool.map(run_worker, sampled_jobs["prophet"][0:100]) #all_jobs["sarimax"][0:8])
@@ -322,7 +323,7 @@ def main():
     # # with multiprocessing.Pool(
     #     processes=1, 
     #     initializer=initialize_worker, 
-    #     initargs=(RAM_PER_WORKER,)
+    #     initargs=(config.RAM_PER_WORKER,)
     # ) as pool:
     #     # result_list_lstm = pool.map(run_worker, sampled_jobs["lstm"][0:5]) #all_jobs["sarimax"][0:8])
     #     try:
