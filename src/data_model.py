@@ -1,6 +1,7 @@
 #%% Make DATA class for dataframe
 # so i can add methods for plotting etc.
 from matplotlib import pyplot as plt
+import matplotlib.ticker as ticker
 import matplotlib
 import seaborn as sns
 import pandas as pd
@@ -14,6 +15,18 @@ from statsmodels.graphics.tsaplots import plot_pacf
 from statsmodels.tsa.seasonal import seasonal_decompose
 from statsmodels.tsa.seasonal import MSTL #multiple seasonal decompose
 
+month_names_short = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+day_names_short = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+plt.rcParams.update({
+    'axes.titlesize': 20,
+    'axes.labelsize': 16,
+    'xtick.labelsize': 12,
+    'ytick.labelsize': 12,
+    'axes.titleweight': 'bold'#,
+    #'axes.labelweight': 'bold'
+})
 
 
 class Data(pd.DataFrame):
@@ -57,23 +70,53 @@ class Data(pd.DataFrame):
 
         plt.show()
 
-    def plot_boxplots(self, col_name: str):
-        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(15, 6))
+    def plot_boxplots(self, col_name: str, max_y=None):
+        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(10, 12), sharey=True, constrained_layout = True)
+        
+        if not max_y:
+            max_y = self.data[col_name].max() * 1.1
+        # for a in ax.flatten():
+        #     a.set_ylim(top=max_y)
+        plt.setp(ax, ylim=(0, max_y))
 
-        sns.boxplot(x=self.data.index.year, y=self.data[col_name], ax=ax[0])
-        ax[0].set_title('Year-wise Box Plot', fontsize = 20, loc='center', fontdict=dict(weight='bold'))
-        ax[0].set_xlabel('Year', fontsize = 16, fontdict=dict(weight='bold'))
-        ax[0].set_ylabel(col_name, fontsize = 16, fontdict=dict(weight='bold'))
+        #yearly
+        sns.boxplot(x=self.data.index.year, y=self.data[col_name], ax=ax[0][0])
+        ax[0][0].set_title('Year-wise Box Plot', loc='center')
+        ax[0][0].set_xlabel('Year')
+        ax[0][0].set_ylabel(col_name)
         #if more than 12 xticks, show only every third label
-        if len(ax[0].get_xticklabels()) > 12:
+        if len(ax[0][0].get_xticklabels()) > 12:
             for i, label in enumerate(ax[0].xaxis.get_major_ticks()):
                 if i % 4 != 0:
                     label.set_visible(False)
 
-        sns.boxplot(x=self.data.index.month, y=self.data[col_name], ax=ax[1])
-        ax[1].set_title('Month-wise Box Plot', fontsize = 20, loc='center', fontdict=dict(weight='bold'))
-        ax[1].set_xlabel('Month', fontsize = 16, fontdict=dict(weight='bold'))
-        ax[1].set_ylabel(col_name, fontsize = 16, fontdict=dict(weight='bold'))
+        #Monthly
+        sns.boxplot(x=self.data.index.month, y=self.data[col_name], ax=ax[0][1])
+        #interval for xticks + rename numbers to months
+        # ax[0][1].xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+        #ax[0][1].xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+        ax[0][1].set_title('Month-wise Box Plot', loc='center')
+        ax[0][1].set_xticks(range(0, 12))
+        ax[0][1].set_xticklabels(month_names_short)
+        ax[0][1].set_xlabel('Month')
+        ax[0][1].set_ylabel(col_name)
+
+        #weekly over year
+        sns.boxplot(x=self.data.index.isocalendar().week, y=self.data[col_name], ax=ax[1][0])
+        ax[1][0].set_title('Weekly Box Plot', loc='center')
+        ax[1][0].xaxis.set_major_locator(ticker.MultipleLocator(7))
+        ax[1][0].set_xlabel('Week')
+        ax[1][0].set_ylabel(col_name)
+
+        #weekdays
+        sns.boxplot(x=self.data.index.dayofweek, y=self.data[col_name], ax=ax[1][1])
+        ax[1][1].set_title('Day of the week Box Plot', loc='center')
+        ax[1][1].set_xticks(range(7))
+        ax[1][1].set_xticklabels(day_names_short)
+        ax[1][1].set_xlabel('Week')
+        ax[1][1].set_ylabel(col_name)
+
+
 
     def plot_seasonal(self, plot_type: str, col_name: str, fig_location=None):
         #seasonal plot (days of week, week of year, years)
@@ -101,13 +144,15 @@ class Data(pd.DataFrame):
             title = 'Daily'
             print(type(series))
             print(series.head())
+
             #Resample daily:
             df = series[col_name].resample("D").sum()
             df = df.reset_index()
+
             #Add new columns:
             df[x] = df['date'].dt.day_of_week
-            df[ref_frame] = df['date'].dt.isocalendar().week #need to make it string later
-            df[ref_frame_str] = df[ref_frame].astype(str) #need string for 'hue'
+            df[ref_frame] = df['date'].dt.isocalendar().week.astype('str') #need to make it string later
+            #df[ref_frame_str] = df[ref_frame].astype(str) #need string for 'hue'
 
         #Weeks in year
         elif plot_type == 'weekly':
@@ -123,36 +168,54 @@ class Data(pd.DataFrame):
             df = df.reset_index()
             #Add new columns:
             df[x] = df['date'].dt.isocalendar().week
-            df[ref_frame] = df['date'].dt.year
-            df[ref_frame_str] = df[ref_frame].astype('str')
+            df[ref_frame] = df['date'].dt.year.astype('str')
+            #df[ref_frame_str] = df[ref_frame].astype('str')
         
         # NOTE: could add daily in year, daily in month
+        #rename ref_frame_str to ref_name for proper legend title
+        #df = df.drop(ref_frame, axis=1).rename(columns={ref_frame:ref_frame_str})
 
-        #Settings for plot:
-        color_palette = sns.color_palette("mako", n_colors=60)
 
         #Get min/max dates for title
         min_date = pd.to_datetime(df['date'].min()).date()
         max_date = pd.to_datetime(df['date'].max()).date()
 
-        #Plotting:
-        ax = sns.lineplot(x=x, y=col_name, data=df, hue=ref_frame_str, errorbar=('ci', False), palette=color_palette, linewidth=0.75)
-        ax.set_title(f'{title} seasonality plot: {min_date} to {max_date}')
+        # Numeric ref_frame values for colormap
+        df['_ref_num'] = df[ref_frame].astype(int)
+        ref_values = sorted(df['_ref_num'].unique())
+        cmap = plt.get_cmap('mako')
+        norm = matplotlib.colors.Normalize(vmin=ref_values[0], vmax=ref_values[-1])
+
+        #Plotting: one line per ref_frame value, colored by colormap
+        fig, ax = plt.subplots(figsize=(12, 6))
+        for val in ref_values:
+            subset = df[df['_ref_num'] == val]
+            grouped = subset.groupby(x)[col_name].mean()
+            ax.plot(grouped.index, grouped.values, color=cmap(norm(val)), linewidth=0.75)
+
+        ax.set_title(f'{title} seasonality plot for {col_name}: {min_date} to {max_date}')
         ax.set_xlabel(xlabel)
-        ax.set_ylabel('value')
+        ax.set_ylabel('count')
         ax.set_xticks(ticks=range(len(xticks_labels)), labels=xticks_labels)
-        # ax.legend(title=plot_type, loc='upper right', bbox_to_anchor=(1, 1))
 
         #if more than 12 xticks, show only every third label
         if len(ax.get_xticklabels()) > 12:
             for i, label in enumerate(ax.xaxis.get_major_ticks()):
                 if i % 3 != 0:
                     label.set_visible(False)
-                    
 
-                
-        ax.legend([],[], frameon=False)
         ax.grid(True)
+
+        # Colorbar outside plot
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, ax=ax, pad=0.02)
+        cbar.set_label(ref_frame.replace('_', ' ').title())
+        # For few distinct values (e.g. years), label each tick explicitly
+        if len(ref_values) <= 15:
+            cbar.set_ticks(ref_values)
+            cbar.set_ticklabels([str(v) for v in ref_values])
+
         plt.tight_layout()
         if fig_location:
             plt.savefig(fname="/".join([fig_location, "_" + plot_type]))

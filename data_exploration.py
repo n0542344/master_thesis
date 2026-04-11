@@ -1,11 +1,13 @@
 #Main pipeline for doing data exploration on raw/cleaed/transformed data
 # (Not on results!)
+#%%
 import pandas as pd
 import numpy as np
 from numpy import nan
 from time import time
 from matplotlib import pyplot as plt
 import pathlib
+import importlib
 
 import seaborn as sns
 
@@ -19,55 +21,49 @@ from src import viz
 from src import utils
 from src import config_cleaning
 
-
+import pandas as pd
+#%%
 #--------------------------------------------------------------------------------
-# MARK: INPUT EXISTING
+# MARK: LOAD DATA
+# (raw, cleaned, transformed)
 #----------------------------------------------------------------------------------
+importlib.reload(clean)
+importlib.reload(config)
+importlib.reload(transform)
 
-#TODO: make backwards file loading: try processed file, if not exists try cleaned, if not exists try raw
-#TODO: Alternative for now -- just load transformed file, because i know it exists.
+df_raw = load.load_data(path=config_cleaning.RAW_DATA_PATH)
+df_clean = clean.clean_data(df_raw, new_file_path=config_cleaning.CLEANED_DATA_PATH)
+df_processed = transform.transform_data(df_clean, new_file_path=config_cleaning.TRANSFORMED_DATA_PATH)
+df = data_model.Data(data=df_processed)
 
-
+#%%
 #--------------------------------------------------------------------------------
-# MARK: INPUT
+# MARK: RAW DATA VIZ
 #----------------------------------------------------------------------------------
 
 # Read Data
-df_raw = load.load_data(path=config_cleaning.RAW_DATA_PATH)
-# df_raw = load.load_data(path="data/01_raw/testdaten.tsv")
 
-#__
-load.show_info(df=df_raw)
-hidden_cols=["date", "EC_ID_I_hash", "EC_ID_O_hash", "T_ISO", "T_DE_T", "T_US", "T_DE_S", "T_US_T", "T_DE", "T_ISO_T", "T_XL"]
-for col in df_raw.columns:
-    if col not in hidden_cols:
-        tmp = df_raw[col].astype(str).unique()
-        tmp = np.array(sorted(tmp))
-        print(f"{col}:\n{tmp}\n")
-print(df_raw.columns)
-#TODO: move back to clean_data
-# df_raw = clean.clean_dates(df_raw) #TODO: remove here, enable again in clean_data()
+# #%%
+# load.show_info(df=df_raw)
+# hidden_cols=["date", "EC_ID_I_hash", "EC_ID_O_hash", "T_ISO", "T_DE_T", "T_US", "T_DE_S", "T_US_T", "T_DE", "T_ISO_T", "T_XL"]
+# for col in df_raw.columns:
+#     if col not in hidden_cols:
+#         tmp = df_raw[col].astype(str).unique()
+#         tmp = np.array(sorted(tmp))
+#         print(f"{col}:\n{tmp}\n")
+# print(df_raw.columns)
+# #TODO: move back to clean_data
+# # df_raw = clean.clean_dates(df_raw) #TODO: remove here, enable again in clean_data()
 
 
 
+#%%
 #--------------------------------------------------------------------------------
-# MARK: CLEANING 
+# MARK: CLEANED DATA VIZ
 #----------------------------------------------------------------------------------
 #Runs only if no file exists at. If not existing, saves df to new file
 #unify dates, columns etc. rename stuff
 IMAGES_PATH_EXPLORATION = IMAGE_PATH + "/00-Data-Exploration/"
-importlib.reload(clean)
-importlib.reload(config)
-df_clean = clean.clean_data(df_raw)
-# df_clean.sort_index(inplace=True)
-# #TODO: remove 5 lines:
-# start_date = pd.to_datetime("2018-01-01")
-# start_date = pd.to_datetime("2024-12-31")
-# mask = (df_clean.index >= "2018-01-01") & (df_clean.index <= "2024-12-31")
-#df_clean = df_clean.loc[mask]
-#df_clean = df_clean['2018-01-01':'2024-12-31'] #only works on monotonic (==daily aggregated, no duplicate days) df
-
-#
 
 #TODO: Check what unique vals are present in df
 clean.check_unique_values(df_clean.drop(["EC_ID_I_hash", "EC_ID_O_hash", "PAT_WARD"], axis=1))
@@ -97,9 +93,9 @@ viz.plot_patient_wards(df_clean, n=500, save_figs=False, location=IMAGES_PATH_EX
 
 
 
-
+#%%
 #--------------------------------------------------------------------------------
-# MARK: TRANSFORMING
+# MARK: TRANSFORMED DATA VIZ
 # /PROCESSING
 #----------------------------------------------------------------------------------
 # make STATIONARY! (if all models need that, otherwise make it a member function)
@@ -112,13 +108,10 @@ viz.plot_patient_wards(df_clean, n=500, save_figs=False, location=IMAGES_PATH_EX
 #NOTE: covid/grippe muss evnetuell imputiert werden da nur wöchentlich
 #NOTE: kann gut zeigen, dass wien gleichen verlauf hat wie bundesländer, daher kann ich Ö-weite Daten
 # nehmen, falls es keine wien-spezifischen Daten gibt.
-importlib.reload(transform)
-
-# make daily aggregations for categorical variables
-df_processed = transform.transform_data(df_clean)
 
 
-#__ #Plot seasonalities daily & weekly of processed df
+#%%
+# Plot seasonalities daily & weekly of processed df
 
 importlib.reload(viz)
 
@@ -145,6 +138,7 @@ for ward in ward_cols:
     viz.seasonal_plot(df_processed, plot_type="daily", col_name=ward)
 
 
+#%%
 #TODO: save data to csv
 # # Plot daily/weekly cases influenza
 # fig, ax = plt.subplots(1)
@@ -154,56 +148,53 @@ for ward in ward_cols:
 
 
 
-#__--------------------------------------------------------------------------------
+#%%--------------------------------------------------------------------------------
 # MARK: DATA VIZ 
 # (EXPLORATION)
 #----------------------------------------------------------------------------------
 IMAGES_PATH_EXPLORATION = IMAGE_PATH + "/00-Data-Exploration/"
-START_DATE_EXPLORATION = "2020-01-01"
+START_DATE_EXPLORATION = "2012-01-01" #"2020-01-01"
+END_DATE_EXPLORATION = "2016-12-31" #"2020-01-01"
 PRE_COVID_START = "2018-01-01"
 PRE_COVID_END = "2020-01-01"
 
+#%%
 #TODO: save vizualisations to csv
 importlib.reload(data_model)
 
 df = data_model.Data(data=df_processed)
 
-#__
+#%%
 
 
-#df.print_head()
-df[START_DATE_EXPLORATION:].plot_seasonal(plot_type='daily', col_name='use_transfused', fig_location=IMAGES_PATH_EXPLORATION)
+df["2023-01-01":"2023-12-31"].plot_seasonal(plot_type='daily', col_name='use_transfused')#, fig_location=IMAGES_PATH_EXPLORATION)
 df[START_DATE_EXPLORATION:].plot_seasonal(plot_type='weekly', col_name='use_transfused')
 
 
-##__
-#Boxplots
-df[START_DATE_EXPLORATION:].plot_boxplots(col_name='use_transfused')
-df[START_DATE_EXPLORATION:].plot_seasonal_subseries(col_name='use_transfused') #NOTE: i think it works, but not enough dummy data.
+##%%
+#Boxplots for year, month, weekly and day of week
+df[START_DATE_EXPLORATION:END_DATE_EXPLORATION].plot_boxplots(col_name='use_transfused')
+df[START_DATE_EXPLORATION:END_DATE_EXPLORATION].plot_boxplots(col_name='use_discarded', max_y = 65)
+df[START_DATE_EXPLORATION:END_DATE_EXPLORATION].plot_boxplots(col_name='use_expired')
+df[START_DATE_EXPLORATION:END_DATE_EXPLORATION].plot_seasonal_subseries(col_name='use_transfused') #NOTE: i think it works, but not enough dummy data.
 #TODO: check if seasonal subseries plot works with multi-year data
 
 
-##__
+##%%
 #Decompose
 df[PRE_COVID_START:PRE_COVID_END].decompose_one(col_name='use_transfused')
 
 
 #df.decompose_all("use_transfused")
 
+#%%
+#Glaub das verwende ich nicht
 # mulitple decomposition (daily + weekly)
 df[PRE_COVID_START:PRE_COVID_END].multiple_decompose(col_name="use_transfused", periods=[7, 365])
-
-
-
-
-##__
-
-
-
 df[pd.to_datetime("2024-01-01"):pd.to_datetime("2024-12-31")].plot_daily_heatmap(col_name='use_transfused')
 
 
-#__ Visualize counts for all plots (as of now only for those starting with 901AN) on top of each other, so that
+#%% Visualize counts for all plots (as of now only for those starting with 901AN) on top of each other, so that
 # its visible, where naming of one ward starts/ends 
 
 
@@ -227,7 +218,7 @@ print(sel_wards)
 plt.savefig(fname="/".join([IMAGES_PATH_EXPLORATION + "show_inconsistency_wards"]))
 plt.show()
 
-#__
+#%%
 # Get unique Letter-combinations (i guess top-wards) from all wards:
 
 import re
@@ -247,7 +238,7 @@ print(len(unique_wards))
 print(ward_results)
 print(len(ward_results))
 
-#__--------------------------------------------------------------------------------
+#%%--------------------------------------------------------------------------------
 # MARK: STATIONARITY 
 # Check for Stat./Make stationarys
 #----------------------------------------------------------------------------------
@@ -269,10 +260,10 @@ from statsmodels.graphics.tsaplots import plot_pacf
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.stattools import kpss
 
-##__
+#%%
 #Time series plots (acf, pacf etc)
-df.plot_autocorrelation(col_name='count')
-df.plot_partial_autocorrelation(col_name='count')
+df.plot_autocorrelation(col_name='use_transfused')
+df.plot_partial_autocorrelation(col_name='use_transfused')
 
 num_differencing = 2
 i = 1
@@ -340,7 +331,7 @@ while i <= num_differencing:
 #seasonal differencing = subtracting value of previous season 
 # (i'll try week, so period = 7 (7 rows before in dataset))
 num_differencing = 3
-period = 365
+period = 7#365
 i = 1
 df_diff = df_processed.copy()
 
@@ -361,7 +352,7 @@ while i <= num_differencing:
 
 
 
-#__ 
+#%% 
 # MARK: COMPARISON
 #----------------------------------------------------------------------------------
 import importlib

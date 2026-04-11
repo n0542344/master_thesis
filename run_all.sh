@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #Created with claude
-# ── Configuration ────────────────────────────────────────────────────────────
+# ── Configuration (chunks are LSTM only) ────────────────────────────────────────────────────────────
 TOTAL_CHUNKS=10 #20         # one per core, adjust to available cores
 RAM_PER_CHUNK=4 #in GB
 PYTHON="python3.12"        # adjust if needed, e.g. python3.11
