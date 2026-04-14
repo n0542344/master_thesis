@@ -42,10 +42,10 @@ transfusion_status_map = {
 
 
          #nan : "???" ,
-        "BER" : "???", #NOTE: vermutlich 'bereitgestellt' (wie ausgegeben?)
-        "END" : "???", #NOTE: mapping?
-        "RES" : "???", #NOTE: vermutlich 'reserviert'
-        "RET" : "???" #NOTE: retourniert -- wie klassifizieren?
+        "BER" : "unknown", #NOTE: vermutlich 'bereitgestellt' (wie ausgegeben?)
+        "END" : "unknown", #NOTE: mapping?
+        "RES" : "unknown", #NOTE: vermutlich 'reserviert'
+        "RET" : "unknown" #NOTE: retourniert -- wie klassifizieren?
 }
 
 #NOTE: it would be better imo to have the cleaned value as key and original values as values,

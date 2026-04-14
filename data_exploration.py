@@ -239,7 +239,7 @@ print(ward_results)
 print(len(ward_results))
 
 #%%--------------------------------------------------------------------------------
-# MARK: STATIONARITY 
+# MARK: STATIONARITY / Statistics
 # Check for Stat./Make stationarys
 #----------------------------------------------------------------------------------
 #TODOLIST:
@@ -252,7 +252,24 @@ print(len(ward_results))
 # 1.2 Statistical test
 #    - Unit root test
 # 
-#  
+
+#%% 
+# Auto_arima:
+from pmdarima import auto_arima
+
+
+autoarima_arima = auto_arima(y=df.loc["2020-01-01": ,config.PRED_COLUMN], seasonal=False, trace=True)
+autoarima_sarima = auto_arima(y=df.loc["2020-01-01": ,config.PRED_COLUMN], seasonal=True, m=7, trace=True)
+autoarima_sarimax = auto_arima(
+    y=df.loc["2020-01-01": ,config.PRED_COLUMN], 
+    x=df.loc["2020-01-01": , config.exog_combinations_list[-1]],
+    seasonal=True, 
+    m=7, 
+    trace=True)
+
+
+#%%
+
 
 from statsmodels.graphics.tsaplots import plot_acf
 from statsmodels.graphics.tsaplots import plot_pacf
