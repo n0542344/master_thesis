@@ -137,10 +137,17 @@ class Model:
     # GETTERS & Print
     # MARK: Getters
 
-    def print_params(self):
-        #TODO: probably better in Model class!
-        for key, value in self.model_params.items():
-            print(key, ": ", value)
+    def print_params(self, params: list=None):
+        #print params supplied via list, if none specified prit all key value pairs:
+        if params:
+            for param in params:
+                try:
+                    print(f"{param}: {self.model_params[param]}", flush=True)
+                except Exception:
+                    pass
+        else:
+            for key, value in self.model_params.items():
+                print(key, ": ", value, flush=True)
         
 
     def get_params_df(self):
@@ -317,8 +324,10 @@ class Model:
         #TODO: probably better in Model class!
 
         #Check df/exog_cols input for validity
-        if len(exog_cols) == 0:
-            raise ValueError("Need to pass col name present in 'df' to exog_cols")
+        if exog_cols == None or len(exog_cols) == 0:
+            # raise ValueError("Need to pass col name present in 'df' to exog_cols")
+            print("No exogenous variables set!")
+            exog_cols = None
         else:
             for col in exog_cols:
                 if col not in self.data.columns:
@@ -355,7 +364,7 @@ class Model:
         self.file_path = "./results/"+self.dir_name
         Path(self.file_path).mkdir(parents=True, exist_ok=True)
 
-    @timer_func
+    #@timer_func
     def save_results(self):
         #Creates new directory where it saves self.model_params as a json and every dataframe for the results
 
@@ -399,7 +408,7 @@ class Model:
 
 
 
-    @timer_func
+    #@timer_func
     def get_start_end_days(self, window):
         #TODO: probably better in Model class! --> Maybe, but i think this setup/need is kinda specific for lstm model
 
@@ -415,7 +424,7 @@ class Model:
         self.forecast_days = (window[3] - window[2]).days #because window[2] and window[3] should be both included as days
 
 
-    @timer_func
+    #@timer_func
     def get_data(self):
         #TODO: probably better in Model class!
         """
@@ -443,7 +452,11 @@ class Model:
         if not self.model_params["prediction_column"]:
             raise ValueError(f"Missing the column to predict ({self.model_params['predcition_column']})")
         
-        columns = list(set([self.model_params["prediction_column"], *self.model_params["exog_cols"]]))#star* to unpack list, pred_cols is str only.
+        #quick fix for exog_cols = None, adding if/else
+        if self.model_params["exog_cols"] != None:
+            columns = list(set([self.model_params["prediction_column"], *self.model_params["exog_cols"]]))#star* to unpack list, pred_cols is str only.
+        else:
+            columns = list(set([self.model_params["prediction_column"]]))#star* to unpack list, pred_cols is str only.
         # print("cols: ", columns)
 
         self.X_train_raw = self.data.loc[self.train_start : self.train_end, columns].values
@@ -453,7 +466,7 @@ class Model:
         self.y_test_raw = self.data.loc[self.test_start : self.test_end, self.model_params["prediction_column"]].values.reshape(-1, 1)
       
 
-    @timer_func
+    #@timer_func
     def add_stepwise_difference(self):
         # oop FUNCTION, passt so! (=> brauch kein argument, verändert finale self.predictions variable)
         #TODO: rename, like add_prediction_actual_difference
@@ -467,7 +480,7 @@ class Model:
             df["Difference"] = df["Actual"] - df["Mean"] 
 
 
-    @timer_func
+    #@timer_func
     def add_to_results(self):        
         #Add to existing self.predictions dictionary. self.predictions contains n keys of name "Day_"n_i where n=len(fc_days)
         # with the value of a dataframe with columns Actual, Mean, Lower, Upper and datetime index. 
@@ -512,7 +525,7 @@ class Model:
             self.predictions[day_label].loc[forecast_date, "Upper"] = np.percentile(day_predictions, 97.5, axis=None)
 
     
-    @timer_func
+    #@timer_func
     def get_stepwise_errors(self):
         #TODO move to base class Model
         #TODO: change ModelARIMA/ModelSARIMA so that it can use this function as well.
@@ -1233,7 +1246,7 @@ class ModelArima(Model):
 
 
 
-    @timer_func
+    #@timer_func
     def add_to_results_ARIMA(self, pred_df, test_start):
         #TODO: this for now is only for ARIMA, but its refactoring of add_to_results from
         # Model class, but instead of OOP its Functional
@@ -1287,7 +1300,7 @@ class ModelArima(Model):
 
         
 
-    @timer_func
+    #@timer_func
     def make_model(self, window):
         #TODO: update model description
         # create model with trainign data + (hyper)parameters
@@ -1314,7 +1327,7 @@ class ModelArima(Model):
 
 
 
-    @timer_func
+    #@timer_func
     def fit(self, model):
         return model.fit()
 
@@ -1330,7 +1343,7 @@ class ModelArima(Model):
 
 
     #TODO: rename to predict()
-    @timer_func
+    #@timer_func
     def get_prediction_ARIMA(self, model_fit, window):
         #TODO: write docstring
         #TODO: maybe merge with get_prediction_SARIMAX -- Keyword: composition
@@ -1495,7 +1508,7 @@ class ModelSarimax(Model):
 
         return self.forecast_errors.loc[["Day_1"]].assign(id=self.stats["id"])
 
-    @timer_func
+    #@timer_func
     def make_model(self, window):
         """
         create model with trainign data + (hyper)parameters
@@ -1514,8 +1527,10 @@ class ModelSarimax(Model):
         # series = self.data[pred_col]
         #TODO: !use SARIMAX instead of ARIMA!
 
-
+        print(f"SARIMAX: in make model, exog: {self.model_params['exog_cols']}", flush=True)
         if self.model_params["exog_cols"]  == None:
+            print(f"SARIMAX: in make model/exog=None, exog: {self.model_params['exog_cols']}", flush=True)
+
             model = SARIMAX(
                 endog=self.data.loc[window[0] : window[1], self.model_params["prediction_column"]],
                 order=(self.model_params["p"], 
@@ -1536,6 +1551,7 @@ class ModelSarimax(Model):
             #         seasonal_order=(self.P, self.D, self.Q, self.m)))
 
         elif self.model_params["exog_cols"] != None:
+            print("SARIMAX: in make_model/exog!=None")
             # exogenous = self.data[exog]
             model = SARIMAX(
                 endog=self.data.loc[window[0] : window[1], self.model_params["prediction_column"]],
@@ -1561,7 +1577,7 @@ class ModelSarimax(Model):
 
         return model
 
-    @timer_func
+    #@timer_func
     def fit(self, model):
         return model.fit()
 
@@ -1592,7 +1608,7 @@ class ModelSarimax(Model):
     # MARK: Getters/Print
     #------------------------------------------------------------------------------------------------
 
-    @timer_func
+    #@timer_func
     def predict(self, model_fit, window):
         #NOTE: renamed from get_prediction() to predict(), because get_prediction() is a member fct of SARIMAX class. 
 
@@ -1607,22 +1623,39 @@ class ModelSarimax(Model):
         test_start = window[2]
         test_end = window[3]
 
-        exog_prediction = self.data.loc[test_start:test_end, self.model_params["exog_cols"]]
+        #quick fix for working with No exogenous cols, adding if/else
+        if self.model_params["exog_cols"] != None:
+            exog_prediction = self.data.loc[test_start:test_end, self.model_params["exog_cols"]]
 
-        preds = (model_fit
-                .get_prediction(
-                    start=test_start, 
-                    end=test_end, 
-                    exog=exog_prediction,
-                    dynamic=True)
-                .summary_frame(alpha=alpha)
-                .rename(columns={
-                    "mean":"Prediction",
-                    "mean_ci_lower": "lower_ci",
-                    "mean_ci_upper": "upper_ci"
-                    }
-                )
-        )
+            preds = (model_fit
+                    .get_prediction(
+                        start=test_start, 
+                        end=test_end, 
+                        exog=exog_prediction,
+                        dynamic=True)
+                    .summary_frame(alpha=alpha)
+                    .rename(columns={
+                        "mean":"Prediction",
+                        "mean_ci_lower": "lower_ci",
+                        "mean_ci_upper": "upper_ci"
+                        }
+                    )
+            )
+        else:
+            preds = (model_fit
+                    .get_prediction(
+                        start=test_start, 
+                        end=test_end, 
+                        dynamic=True)
+                    .summary_frame(alpha=alpha)
+                    .rename(columns={
+                        "mean":"Prediction",
+                        "mean_ci_lower": "lower_ci",
+                        "mean_ci_upper": "upper_ci"
+                        }
+                    )
+            )
+
         # #iterate over both model_fits and validation_sets:
         # for fit, validation_set in zip(self.model_fits, self.validation_sets): #'fit' is the fitted model
         #     test_start = validation_set[2]
@@ -1638,7 +1671,7 @@ class ModelSarimax(Model):
         return preds
 
 
-    @timer_func
+    #@timer_func
     def add_to_results_SARIMAX(self, pred_df, test_start):
         #TODO: this for now is only for ARIMA, but its refactoring of add_to_results from
         #Specific for each Model (arima/sarimax are same though).
@@ -1869,7 +1902,7 @@ class ModelLSTM(Model):
 
 
 
-    @timer_func
+    #@timer_func
     def scale_data(self):
         """
         Fits and transforms X/y train and test data with StandardScaler().
@@ -1907,7 +1940,7 @@ class ModelLSTM(Model):
 
 
 
-    @timer_func
+    #@timer_func
     def get_training_test_set(self):
         #splits data of this window into many samples (basically nested rolling window for this window in buld_model)
         # into X_train with 3D shape of (samples, step_size=l)
@@ -1934,7 +1967,7 @@ class ModelLSTM(Model):
         self.y_test = np.reshape(self.y_test, (self.y_test.shape[1], self.y_test.shape[0])) #change (x, y) to (y, x) where y_test_scaled = (fc_window, 1)
 
         
-    @timer_func
+    #@timer_func
     def build_model(self):
         #TODO: description
 
@@ -1964,7 +1997,7 @@ class ModelLSTM(Model):
 
 
     
-    @timer_func
+    #@timer_func
     def fit_model(self):
         x_train = self.X_train.astype('float32')
         y_train = self.y_train.astype('float32')
@@ -1986,7 +2019,7 @@ class ModelLSTM(Model):
 
     
 
-    @timer_func
+    #@timer_func
     def get_prediction_intervalls(self):      
         # Repeat X_test 'n' times along a new axis
         # If X_test is (samples, time, features), tiled becomes (iterations, samples, time, features)
@@ -2018,7 +2051,7 @@ class ModelLSTM(Model):
 
 
 
-    @timer_func
+    #@timer_func
     def reset_states(self):
         #resets all self values used in model_run
         if hasattr(self, 'model') and self.model is not None:
@@ -2134,7 +2167,7 @@ class ModelProphet(Model):
         self.model_params["upper_limit"] = upper_limit
 
 
-    @timer_func
+    #@timer_func
     def get_data(self):
         #TODO: probably better in Model class!
         #TODO: Description of get_data
@@ -2143,7 +2176,11 @@ class ModelProphet(Model):
         if not self.model_params["prediction_column"]:
             raise ValueError(f"Missing the column to predict ({self.model_params['predcition_column']})")
         
-        columns = list(set([self.model_params["prediction_column"], *self.model_params["exog_cols"]]))#star* to unpack list, pred_cols is str only.
+        #quick fix for exog_cols = None, adding if/else
+        if self.model_params["exog_cols"] != None:
+            columns = list(set([self.model_params["prediction_column"], *self.model_params["exog_cols"]]))#star* to unpack list, pred_cols is str only.
+        else:
+            columns = list(set([self.model_params["prediction_column"]]))#star* to unpack list, pred_cols is str only.
 
         # self.prophet_train = (self.data.loc[self.train_start : self.train_end, columns]
         self.prophet_train = (self.data.loc[self.train_start : self.train_end, columns]

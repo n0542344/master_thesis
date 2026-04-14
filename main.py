@@ -95,6 +95,7 @@ def run_worker(args):
             model_instance.set_exogenous_cols(**params)
         model_instance.set_validation_rolling_window(**params)
         model_instance.set_model_parameters(**params) 
+        #model.print_params(params=["exog_cols", "inner_window"]) #delete
         # logger.info(f"{ModelClass.__name__}/{job_id} Start day {params['start_date'].date()} with {model_instance.stats['window_num']} windows")
         run_results = model_instance.model_run()
         # logger.info(f"{ModelClass.__name__}/{job_id} finished in {model_instance.stats['run_duration']}s")
@@ -225,7 +226,7 @@ def main():
         return sampled_grid
 
     #Create grids, sample
-    full_grid_arima = list(ParameterGr1id(config.gs_config_arima))
+    full_grid_arima = list(ParameterGrid(config.gs_config_arima))
     full_grid_sarimax = list(ParameterGrid(config.gs_config_sarimax))
     full_grid_lstm = list(ParameterGrid(config.gs_config_lstm))
     #sampled_grid_lstm = sample_grid(full_grid_lstm, n_samples=10) #only sample lstm, others are fast enough to fully search
@@ -242,7 +243,9 @@ def main():
 
     #Sample jobs now, to still have continuous global ids
     sampled_jobs = all_jobs
-    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=config.lstm_n_samples)
+    sampled_jobs["arima"] = sample_grid(sampled_jobs["arima"], n_samples=2) #delete
+    sampled_jobs["sarimax"] = sample_grid(sampled_jobs["sarimax"], n_samples=config.sarimax_n_samples) #keep? 
+    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=config.lstm_n_samples) #delete?
     
     # cores = 24#max(1, multiprocessing.cpu_count() - 1)
     # logger.info(f"---Using {cores} cores---")
