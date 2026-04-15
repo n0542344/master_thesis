@@ -12,17 +12,14 @@ ENABLE_LOGGING = True
 SAVE_FIGS = False
 
 #Slice data while developing
-DEV_START_DATE = "2024-05-01"
-DEV_END_DATE = "2025-07-01"
+# DEV_START_DATE = "2024-05-01"
+# DEV_END_DATE = "2025-07-01"
 PRED_COLUMN = "use_transfused"
 
 #For random sampling reproducibility
 SEED = 67
 
-#Settings for multiprocessing
-TOTAL_CORES = 4
-TOTAL_RAM_GB = 10
-RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
+
 
 
 
@@ -31,8 +28,10 @@ RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES
 # MARK: Grid search options
 #----------------------------------------------------------------------------------------------------
 
-#Ranges of options for grid search
+#Get all combinations of exogenous types
 
+#Wards are not implemented, because that would lead to data leakage, where sarimax would get a nearly perfect forecast!
+#(Because S/arima, prophet need the exogenous variables for the prediction period!)
 exog_types = {
     "uses" : ["use_discarded", "use_expired"],
     #"wards" : ['ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC'],
@@ -41,16 +40,20 @@ exog_types = {
 }
 
 exog_combinations = config_utils.get_exog_list_combinations(exog_types)
-exog_combinations_list = [list[1] for list in exog_combinations]
+exog_combinations_list = [list[1] for list in exog_combinations] + [None] #add empty list, to run without exog
+#exog_combinations_list = [[]] #delete!
 
 
+
+#Ranges of options for grid search
+
+#currently 147 combinations (just multiply n for each param: 1*1*1*1*7*3*7=147)
 gs_config_arima = {
     "prediction_column" : [PRED_COLUMN],
         
-    "train_percent" : arange(0.6, 0.8, 0.1),
+    "train_percent" : [0.7], #arange(0.6, 0.8, 0.1),
     "test_len" : [14],
-    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2024-02-01", "2024-03-01"]],
-    # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
+    "start_date" : [pd.to_datetime("2020-01-01")],
 
     "p" : list(range(0,7)),
     "d" : list(range(0,3)),
@@ -58,62 +61,63 @@ gs_config_arima = {
 }
 
 
-
+#currently 16384 combinations, if d/D is only set to one would be 4096
+sarimax_n_samples = 500 #set to <0 to get full grid (no sampling) or delete in main.py
 gs_config_sarimax = {
     "prediction_column" : [PRED_COLUMN],
     
     "exog_cols" : exog_combinations_list,
     
-    "train_percent" : arange(0.6, 0.8, 0.1),
+    "train_percent" : [0.7], #arange(0.6, 0.8, 0.1),
     "test_len" : [14],
-    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2024-02-01", "2024-03-01"]],
+    "start_date" : [pd.to_datetime("2020-01-01")], #2022-01-01
     # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
 
-    "p" : [0, 1], #list(range(0,3)),
+    "p" : list(range(0,5)), #[0, 1], 
     "d" : [0, 1], #list(range(0,2)),
-    "q" : [1], #list(range(0,7)),
-    "P" : [0, 1], #list(range(0,2)),
-    "D" : [0, 1], #list(range(0,2)),
-    "Q" : [0, 1], #list(range(0,7)),
-    "m" : [7] #list(range(0,7))
+    "q" : list(range(0,5)), #[1], 
+    "P" : list(range(0,5)), #[0, 1],
+    "D" : [0, 1], 
+    "Q" : list(range(0,5)), #[0, 1],
+    "m" : [7, 14] #list(range(0,7))
 }
 
 
 
-lstm_n_samples = 500
+lstm_n_samples = -1 #set to <0 to get full grid (no sampling) or delete in main.py
+#currently 256 combinations
 gs_config_lstm = {
     "prediction_column" : [PRED_COLUMN],
 
     "validation_type" : ["rolling"], #, "expanding"],
     
     "exog_cols" : exog_combinations_list,
-    
-    "train_percent" : [0.7, 0.8], #list(np.arange(0.6, 0.8, 0.1)), #wouldnt it make more sense to use int of days before to train? like train_days = 365*7 or 730 or something?
-    "test_len" : [7, 14],
-    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2024-02-01", "2024-03-01"]],
+    "inner_window" : [365], #365=default; in days (time steps)
+    "train_percent" : [0.7], #list(np.arange(0.6, 0.8, 0.1)), 
+    "test_len" : [14], #7
+    "start_date" : [pd.to_datetime("2020-01-01")],
     # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
-    # "start_date" : [pd.to_datetime(day) for day in ["2008-01-01", "2012-01-01", "2016-01-01", "2020-01-01", "2024-01-01"]],
     
-    "memory_cell" : [32, 64, 128],
+    "memory_cell" : [32, 64, 128, 256],
     "epochs" : [20, 100],
-    "batch_size" : [32], #64
-    "pi_iterations" : [100, 200],
+    "batch_size" : [32, 64],
+    "pi_iterations" : [100], 
     "optimizer" : ["adam"],
-    "loss" : ["mean_squared_error", "mean_absolute_error", "mean_squared_logarithmic_error"], #see description here:https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/
+    "loss" : ["mean_squared_error", "mean_absolute_error"], #, "mean_squared_logarithmic_error"], #see description here:https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/
 
     "lower_limit" : [2.5],
     "upper_limit" : [97.5]
 }
 
-
+#currently 8 combinations (==num of exogenous combinations)
 gs_config_prophet = {
     "prediction_column" : [PRED_COLUMN],
     
     "exog_cols" : exog_combinations_list,
     
-    "train_percent" : arange(0.6, 0.8, 0.1),
+    "train_percent" : [0.9], #0.7
     "test_len" : [14],
-    "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2024-02-01", "2024-03-01"]],
+    "start_date" : [pd.to_datetime("2023-10-01")],
     # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
 
     "lower_limit" : [2.5],

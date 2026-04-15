@@ -8,7 +8,6 @@ import argparse #to run different python files for lstm
 # os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 # os.environ["TF_DATA_EXPERIMENTAL_DISABLE_THREADING"] = "1"
 
-#Limit cores per tensorflow python process
 #TODO: Still necessary after changing to different python files for concurrent running?
 os.environ["OMP_NUM_THREADS"] = "4"      # change to however many you want
 os.environ["TF_NUM_INTRAOP_THREADS"] = "4"
@@ -51,11 +50,6 @@ from multiprocessing_logging import install_mp_handler
 import sys
 import resource
 
-#For developing purposes:
-# import importlib
-# print(load.__file__)
-# print(clean.__file__)
-
 #turn off pandas warnings:
 from warnings import filterwarnings
 filterwarnings('ignore')
@@ -67,12 +61,7 @@ prophet_logger.propagate = False
 prophet_logger.setLevel(logging.CRITICAL)
 
 # IMAGE_PATH = "plots/2025_10_10-Plots_for_Meeting/"
-RUN_ALL = False
 RUN_DATE = datetime.today().strftime('%Y%m%d-%H_%M')
-
-# TOTAL_CORES = 4
-# TOTAL_RAM_GB = 10
-# RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
 
 
 #__
@@ -219,11 +208,18 @@ def main():
     # from pmdarima import auto_arima
     # autoarima_res = auto_arima(y=df[config.PRED_COLUMN], seasonal=True, m=7, trace=True)
 
-    def sample_grid(full_grid, n_samples, seed=config.SEED):
+    def sample_grid(full_grid, n_samples: int, seed=config.SEED):
+        # Takes a sample of n_samples from supplied full_grid.
+        # Returns full grid, if n_samples is below zero.
+
         random.seed(seed)
+
+        if n_samples < 0:
+            return full_grid
 
         sampled_grid = random.sample(full_grid, min(n_samples, len(full_grid)))
         return sampled_grid
+
 
     #Create grids, sample
     full_grid_arima = list(ParameterGrid(config.gs_config_arima))
@@ -243,9 +239,9 @@ def main():
 
     #Sample jobs now, to still have continuous global ids
     sampled_jobs = all_jobs
-    sampled_jobs["arima"] = sample_grid(sampled_jobs["arima"], n_samples=2) #delete
+    #sampled_jobs["arima"] = sample_grid(sampled_jobs["arima"], n_samples=2) 
     sampled_jobs["sarimax"] = sample_grid(sampled_jobs["sarimax"], n_samples=config.sarimax_n_samples) #keep? 
-    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=config.lstm_n_samples) #delete?
+    #sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=config.lstm_n_samples)
     
     # cores = 24#max(1, multiprocessing.cpu_count() - 1)
     # logger.info(f"---Using {cores} cores---")

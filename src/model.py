@@ -1502,7 +1502,7 @@ class ModelSarimax(Model):
 
         all_windows_end = time.time()
         print(f"\nTotal time for all windows {all_windows_end - all_windows_start}s")
-        self.stats["run_duration"] = all_windows_end - all_windows_start #TODO: move to setter?
+        self.stats["run_duration"] = round(all_windows_end - all_windows_start, ndigits=2) #TODO: move to setter?
 
         self.save_results()
 
@@ -1893,7 +1893,7 @@ class ModelLSTM(Model):
         self.get_stepwise_errors()
 
         print(f"\nTotal time for all windows {window_end - all_windows_start}s", flush=True)
-        self.stats["run_duration"] = window_end - all_windows_start #TODO: move to setter?
+        self.stats["run_duration"] = round(window_end - all_windows_start, ndigits=2) #TODO: move to setter?
 
         self.save_results()
 
@@ -2150,7 +2150,7 @@ class ModelProphet(Model):
         self.get_stepwise_errors()
 
         all_windows_end = time.time()
-        self.stats["run_duration"] = all_windows_end - all_windows_start #TODO: move to setter?
+        self.stats["run_duration"] = round(all_windows_end - all_windows_start, ndigits=2) #TODO: move to setter?
         print(f"\nTotal time for all windows {all_windows_end - all_windows_start}s")
 
         self.save_results()
