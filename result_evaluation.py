@@ -4,6 +4,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import os
 import glob
+import re
 #%%
 IMG_PATH = "./plots"
 
@@ -64,10 +65,10 @@ def load_model_resuls_by_id(model_name: str, result_id: int, results_path=RESULT
     files.sort(key=get_day_number)
     
     data_dict = {}
-    for f in files:
+    for file in files:
         # Create key: Day_1, Day_2, etc.
-        key = os.path.splitext(os.path.basename(f))[0] 
-        data_dict[key] = pd.read_csv(f)
+        key = os.path.splitext(os.path.basename(file))[0] 
+        data_dict[key] = pd.read_csv(file, index_col=0, parse_dates=True, sep=";")
         
     return data_dict
 
@@ -186,25 +187,28 @@ N = 5
 arima_overview_top_n = get_best_n_results(results_overview["arima"], "RMSE", n=N)
 arima_top_id = arima_overview_top_n.index[0]
 arima_top = arima_overview_top_n.loc[arima_top_id]
+arima_best = load_model_resuls_by_id("Arima", result_id=arima_top_id)
 
 
 # Get best for sarimax -- overview (=grid_search_results_csv)
 sarimax_overview_top_n = get_best_n_results(results_overview["sarimax"], "RMSE", n=N)
 sarimax_top_id = sarimax_overview_top_n.index[0]
 sarimax_top = sarimax_overview_top_n.loc[sarimax_top_id]
+sarimax_best = load_model_resuls_by_id("Sarimax", result_id=sarimax_top_id)
 
 
 # Get best for lstm -- overview (=grid_search_results_csv)
 lstm_overview_top_n = get_best_n_results(results_overview["lstm"], "RMSE", n=N)
 lstm_top_id = lstm_overview_top_n.index[0]
 lstm_top = lstm_overview_top_n.loc[lstm_top_id]
+lstm_best = load_model_resuls_by_id("LSTM", result_id=lstm_top_id)
 
 
 # Get best for prophet -- overview (=grid_search_results_csv)
-prophet_overview_top_n = get_best_n_results(results_overview["prophet"], "RMSE", n=N)
+prophet_overview_top_n= get_best_n_results(results_overview["prophet"], "RMSE", n=N)
 prophet_top_id = prophet_overview_top_n.index[0]
 prophet_top = prophet_overview_top_n.loc[prophet_top_id]
-prophet_best = 
+prophet_best = load_model_resuls_by_id("Prophet", result_id=prophet_top_id)
 
 #%%
 # Get best of all models
@@ -234,4 +238,4 @@ plot_error_val_increase(results_overview, error_val=["RMSE", "MAE"], n=1000)
 # %%
 # Plot time series with Actual, FC, upper/lower CI for all models:
 def plot_fc_time_series(model: pd.DataFrame):
-
+    pass

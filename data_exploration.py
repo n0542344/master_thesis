@@ -70,7 +70,7 @@ clean.check_unique_values(df_clean.drop(["EC_ID_I_hash", "EC_ID_O_hash", "PAT_WA
 
 
 #
-# Plot frequency counts for unique values in every column
+#%% Plot frequency counts for unique values in every column
 #TODO: move into viz.py
 
 

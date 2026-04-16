@@ -2140,7 +2140,7 @@ class ModelProphet(Model):
             self.fit_model() #train model 
             self.predict()
             #TODO: make add_to_results()
-            self.add_to_results()
+            self.add_to_results() #overriden in Prophet
             window_end = time.time()
             
             # print(f"Window {i} executed in {window_end - window_start}s\n", flush=True)
@@ -2161,10 +2161,25 @@ class ModelProphet(Model):
 
 
 
-    def set_model_parameters(self, lower_limit: float=2.5, upper_limit: float=97.5, **kwargs):
+    def set_model_parameters(
+            self, 
+            lower_limit: float=2.5, 
+            upper_limit: float=97.5, 
+            changepoint_prior_scale: float=0.05,
+            seasonality_mode: str="additive",
+            seasonality_prior_scale: float=10.0,
+            holidays_prior_scale: float=10.0,
+            **kwargs
+            ):
 
         self.model_params["lower_limit"] = lower_limit
         self.model_params["upper_limit"] = upper_limit
+        
+        self.model_params["changepoint_prior_scale"] = changepoint_prior_scale
+        self.model_params["seasonality_mode"] = seasonality_mode
+        self.model_params["seasonality_prior_scale"] = seasonality_prior_scale
+        self.model_params["holidays_prior_scale"] = holidays_prior_scale
+
 
 
     #@timer_func
@@ -2188,6 +2203,13 @@ class ModelProphet(Model):
                               .reset_index()
                               .rename(columns={"date":"ds", self.model_params["prediction_column"]:"y"})
                               )
+        #get exog_cols for forecast period:
+        if self.model_params.get("exog_cols"):
+            self.prophet_exog = (self.data.loc[self.train_start :, self.model_params["exog_cols"]]
+                                .reset_index()
+                                .rename(columns={"date": "ds"})
+                                )
+            
         dupes = self.prophet_train[self.prophet_train.duplicated(subset="ds")]
         if not dupes.empty:
             print(f"Warning: {len(dupes)} duplicate dates found in job {self.stats['id']}", flush=True)
@@ -2197,20 +2219,54 @@ class ModelProphet(Model):
     def build_model(self):
         interval_width = (self.model_params["upper_limit"] - self.model_params["lower_limit"]) / 100
 
+
+        for k, v in self.model_params.items():
+            print(f"{k}: {v}")
+
         self.model = Prophet(
-            weekly_seasonality=True, 
-            interval_width=interval_width
+            yearly_seasonality=True,
+            weekly_seasonality=True, #default 'auto' should capture weekly s.
+            #Add Grid search Parameters:
+            interval_width=interval_width, #0.95
+            changepoint_prior_scale=self.model_params["changepoint_prior_scale"],
+            seasonality_mode=self.model_params["seasonality_mode"],
+            seasonality_prior_scale=self.model_params["seasonality_prior_scale"],
+            holidays_prior_scale=self.model_params["holidays_prior_scale"]
         )
 
-        self.model.add_country_holidays(country_name="Austria")
+        #Method-dependent settings of grid search parameters:
+        self.model.add_country_holidays(country_name='Austria')
+        #Set exogenous cols if not None:
+        if self.model_params.get("exog_cols"):
+            for exog in self.model_params["exog_cols"]:
+                self.model.add_regressor(exog)
+                
+        #Print all set parameters (testing)
+        # for k in config.gs_config_prophet.keys():
+        #     try:                   
+        #         print(f"{k}: {getattr(self.model, k)}", flush=True)
+        #     except Exception:
+        #         pass
+        # #and the regressors:
+        # try:
+        #     print(f"extra_regressors: {list(self.model.extra_regressors.keys())}", 
+        #       flush=True)
+        #     print(self.data)
+        # except Exception:
+        #     pass
 
+        
 
 
     def fit_model(self):
         self.model.fit(
-            self.prophet_train
+            df=self.prophet_train
             .reset_index()
-            .rename(columns={"date":"ds", config.PRED_COLUMN:"y"})
+            .rename(columns={
+                "date":"ds", 
+                self.model_params["prediction_column"]:"y"
+                }
+            )
          ) #rename? But X_train doesnt really make sense imo
 
 
@@ -2219,6 +2275,15 @@ class ModelProphet(Model):
         #TODO: naming is not really descriptive!
         #initialize predictions-dataframe -- contains training + prediciton periods!
         self.forecast_df = self.model.make_future_dataframe(periods=self.forecast_days, freq="D")
+
+        #Add exogenous columns (+rows) for forecast period (if exog is present)
+        if self.model_params.get("exog_cols"):
+            self.forecast_df = self.forecast_df.merge(
+                self.prophet_exog,
+                on="ds",
+                how="left"
+            )
+
 
         #predict
         self.forecast = self.model.predict(self.forecast_df)

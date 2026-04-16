@@ -12,9 +12,14 @@ ENABLE_LOGGING = True
 SAVE_FIGS = False
 
 #Slice data while developing
-# DEV_START_DATE = "2024-05-01"
-# DEV_END_DATE = "2025-07-01"
+DEV_START_DATE = "2024-05-01"
+DEV_END_DATE = "2025-07-01"
 PRED_COLUMN = "use_transfused"
+
+#Set config for multiprocessing (doesnt work i think, but needs to be set)
+TOTAL_CORES = 4
+TOTAL_RAM_GB = 10
+RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
 
 #For random sampling reproducibility
 SEED = 67
@@ -48,6 +53,7 @@ exog_combinations_list = [list[1] for list in exog_combinations] + [None] #add e
 #Ranges of options for grid search
 
 #currently 147 combinations (just multiply n for each param: 1*1*1*1*7*3*7=147)
+arima_n_samples = 1 #-1
 gs_config_arima = {
     "prediction_column" : [PRED_COLUMN],
         
@@ -62,7 +68,7 @@ gs_config_arima = {
 
 
 #currently 16384 combinations, if d/D is only set to one would be 4096
-sarimax_n_samples = 500 #set to <0 to get full grid (no sampling) or delete in main.py
+sarimax_n_samples = 1 #500 #set to <0 to get full grid (no sampling) or delete in main.py
 gs_config_sarimax = {
     "prediction_column" : [PRED_COLUMN],
     
@@ -84,7 +90,7 @@ gs_config_sarimax = {
 
 
 
-lstm_n_samples = -1 #set to <0 to get full grid (no sampling) or delete in main.py
+lstm_n_samples = 1 #-1 #set to <0 to get full grid (no sampling) or delete in main.py
 #currently 256 combinations
 gs_config_lstm = {
     "prediction_column" : [PRED_COLUMN],
@@ -101,7 +107,7 @@ gs_config_lstm = {
     "memory_cell" : [32, 64, 128, 256],
     "epochs" : [20, 100],
     "batch_size" : [32, 64],
-    "pi_iterations" : [100], 
+    "pi_iterations" : [100], # n iterations to generate uncertainty
     "optimizer" : ["adam"],
     "loss" : ["mean_squared_error", "mean_absolute_error"], #, "mean_squared_logarithmic_error"], #see description here:https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/
 
@@ -109,12 +115,17 @@ gs_config_lstm = {
     "upper_limit" : [97.5]
 }
 
-#currently 8 combinations (==num of exogenous combinations)
+#currently 288 combinations
+prophet_n_samples = 10
 gs_config_prophet = {
     "prediction_column" : [PRED_COLUMN],
     
     "exog_cols" : exog_combinations_list,
-    
+    "changepoint_prior_scale" : [0.001, 0.01, 0.05], #flexibility of trend changes
+    "seasonality_mode" : ["additive", "multiplicative"], #default: additive
+    "seasonality_prior_scale" : [0.1, 1, 10], #default: 10; modulates impact of seasonality effect, low=less impact
+    "holidays_prior_scale" : [0.1, 1, 10], #default: 10; modulates impact of prior holidays
+
     "train_percent" : [0.9], #0.7
     "test_len" : [14],
     "start_date" : [pd.to_datetime("2023-10-01")],
