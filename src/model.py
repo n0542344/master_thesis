@@ -501,8 +501,8 @@ class Model:
             for fc_day in range(self.forecast_days):
                 day_label = f"Day_{fc_day + 1}"
 
-                start_date = self.validation_sets[0][2]
-                end_date = self.validation_sets[-1][2] + pd.Timedelta(days=fc_day)
+                start_date = self.validation_sets[0][2] #first predicted day (whole dataset)
+                end_date = self.validation_sets[-1][2] + pd.Timedelta(days=fc_day) #last prediction day (whole dataset)
 
                 self.predictions[day_label] = pd.DataFrame(
                     index=pd.date_range(start_date, end_date),
@@ -2259,14 +2259,15 @@ class ModelProphet(Model):
 
 
     def fit_model(self):
+        print(self.prophet_train.head(), flush=True)
         self.model.fit(
             df=self.prophet_train
-            .reset_index()
-            .rename(columns={
-                "date":"ds", 
-                self.model_params["prediction_column"]:"y"
-                }
-            )
+            # .reset_index()
+            # .rename(columns={
+            #     "date":"ds", 
+            #     self.model_params["prediction_column"]:"y"
+            #     }
+            # )
          ) #rename? But X_train doesnt really make sense imo
 
 
@@ -2287,6 +2288,39 @@ class ModelProphet(Model):
 
         #predict
         self.forecast = self.model.predict(self.forecast_df)
+
+    def add_to_results(self):
+        """Override 'add_to_results' from base class, to adapt to output of prohpet in self.forecast,
+        by retrieving each days value via _get_day_predictions()
+        """
+
+        #Create dict 'predictions' if not exists for each day in range(forecast_days)
+        if not hasattr(self, "predictions") or self.predictions is None or type(self.predictions) == list:
+            self.predictions = {}
+            for fc_day in range(self.forecast_days):
+                day_label = f"Day_{fc_day + 1}"
+                start_date = self.validation_sets[0][2]
+                end_date = self.validation_sets[-1][2] + pd.Timedelta(days=fc_day)
+                self.predictions[day_label] = pd.DataFrame(
+                    index=pd.date_range(start_date, end_date),
+                    columns=["Actual", "Mean", "Lower", "Upper"]
+                )
+
+        for day in range(self.forecast_days):
+            day_label = f"Day_{day + 1}"
+            forecast_date = self.test_start + pd.Timedelta(days=day)
+            row = self._get_day_predictions(day)  # full Prophet forecast row (Series)
+
+            self.predictions[day_label].loc[forecast_date, "Actual"] = (
+                self.data.loc[forecast_date, self.model_params["prediction_column"]]
+            )
+            self.predictions[day_label].loc[forecast_date, "Mean"]  = row["yhat"]
+            self.predictions[day_label].loc[forecast_date, "Lower"] = row["yhat_lower"]
+            self.predictions[day_label].loc[forecast_date, "Upper"] = row["yhat_upper"]
+
+
+
+
 
 
     def _get_day_predictions(self, day):
