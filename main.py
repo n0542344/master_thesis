@@ -252,36 +252,36 @@ def main():
     #------Run models (with multiprocessing) --------
     spawn_ctx = multiprocessing.get_context("spawn")
 
-    # if args.model in (None, "arima"):
-    #     logger.info("---Starting ARIMA---")
-    #     with spawn_ctx.Pool(
-    #     # with multiprocessing.Pool(
-    #         processes=config.TOTAL_CORES, 
-    #         initializer=initialize_worker, 
-    #         initargs=(config.RAM_PER_WORKER,)
-    #     ) as pool:
-    #         result_list_arima = pool.map(run_worker, sampled_jobs["arima"])# [0:100]) #to take subset
+    if args.model in (None, "arima"):
+        logger.info("---Starting ARIMA---")
+        with spawn_ctx.Pool(
+        # with multiprocessing.Pool(
+            processes=config.TOTAL_CORES, 
+            initializer=initialize_worker, 
+            initargs=(config.RAM_PER_WORKER,)
+        ) as pool:
+            result_list_arima = pool.map(run_worker, sampled_jobs["arima"])# [0:100]) #to take subset
 
-    #     valid_results_arima = [res[3] for res in result_list_arima if res is not None]
-    #     final_result_df_arima = pd.concat(valid_results_arima).set_index("id")
-    #     final_result_df_arima.to_csv("./results/Arima/grid_search_results.csv")
-    #     logger.info("---Finished ARIMA---")
+        valid_results_arima = [res[3] for res in result_list_arima if res is not None]
+        final_result_df_arima = pd.concat(valid_results_arima).set_index("id")
+        final_result_df_arima.to_csv("./results/Arima/grid_search_results.csv")
+        logger.info("---Finished ARIMA---")
 
 
-    # if args.model in (None, "sarimax"):
-    #     logger.info("---Starting SARIMAX---")
-    #     with spawn_ctx.Pool(
-    #     # with multiprocessing.Pool(
-    #         processes=config.TOTAL_CORES, 
-    #         initializer=initialize_worker, 
-    #         initargs=(config.RAM_PER_WORKER,)
-    #     ) as pool:
-    #         result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"])# [0:100]) #to take subset
+    if args.model in (None, "sarimax"):
+        logger.info("---Starting SARIMAX---")
+        with spawn_ctx.Pool(
+        # with multiprocessing.Pool(
+            processes=config.TOTAL_CORES, 
+            initializer=initialize_worker, 
+            initargs=(config.RAM_PER_WORKER,)
+        ) as pool:
+            result_list_sarimax = pool.map(run_worker, sampled_jobs["sarimax"])# [0:100]) #to take subset
 
-    #     valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
-    #     final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
-    #     final_result_df_sarimax.to_csv("./results/Sarimax/grid_search_results.csv")
-    #     logger.info("---Finished SARIMAX---")
+        valid_results_sarimax = [res[3] for res in result_list_sarimax if res is not None]
+        final_result_df_sarimax = pd.concat(valid_results_sarimax).set_index("id")
+        final_result_df_sarimax.to_csv("./results/Sarimax/grid_search_results.csv")
+        logger.info("---Finished SARIMAX---")
 
 
     if args.model in (None, "prophet"):
@@ -307,21 +307,21 @@ def main():
         logger.info("---Finished Prophet---")
     
 
-    # if args.model in ("lstm"):
-    #     logger.info(f"---Starting LSTM chunk {args.chunk}/{args.total_chunks-1}---")
-    #     result_list_lstm = run_lstm_chunk(
-    #         sampled_jobs["lstm"],
-    #         args.chunk,
-    #         args.total_chunks
-    #     )
-    #     valid_results_lstm = [res[3] for res in result_list_lstm if res is not None]
-    #     if valid_results_lstm:
-    #         final_result_df_lstm = pd.concat(valid_results_lstm).set_index("id")
-    #         out_path = f"./results/LSTM/grid_search_results_chunk_{args.chunk}.csv"
-    #         final_result_df_lstm.to_csv(out_path)
-    #         logger.info(f"---Finished LSTM chunk {args.chunk}, saved to {out_path}---")
-    #     else:
-    #         logger.warning(f"LSTM chunk {args.chunk} produced no valid results")
+    if args.model in ("lstm"):
+        logger.info(f"---Starting LSTM chunk {args.chunk}/{args.total_chunks-1}---")
+        result_list_lstm = run_lstm_chunk(
+            sampled_jobs["lstm"],
+            args.chunk,
+            args.total_chunks
+        )
+        valid_results_lstm = [res[3] for res in result_list_lstm if res is not None]
+        if valid_results_lstm:
+            final_result_df_lstm = pd.concat(valid_results_lstm).set_index("id")
+            out_path = f"./results/LSTM/grid_search_results_chunk_{args.chunk}.csv"
+            final_result_df_lstm.to_csv(out_path)
+            logger.info(f"---Finished LSTM chunk {args.chunk}, saved to {out_path}---")
+        else:
+            logger.warning(f"LSTM chunk {args.chunk} produced no valid results")
 
 
 
