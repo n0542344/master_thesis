@@ -17,28 +17,26 @@ from src import utils
 import importlib
 
 
-from sklearn.model_selection import ParameterGrid
-
-
 #%%
 df_processed = pd.read_csv("./data/03_transformed/output_transformed.csv", index_col="date", parse_dates=True)
 df = data_model.Data(data=df_processed)
 
-#%%
 
-full_grid_prophet = list(ParameterGrid(config.gs_config_prophet))
-test_config = full_grid_prophet[0]
-test_config["start_date"] = pd.to_datetime("2023-01-01")
 
 #%%
 importlib.reload(model)
 
-m = model.ModelProphet(df)
-m.set_validation_rolling_window(**test_config)
-m.set_model_parameters(**test_config)
-m.set_exogenous_cols(**test_config)
-m.set_prediction_column(**test_config)
-m.model_run()
-
-
+comp = model.ModelComparison(data=df)
+comp.set_parameters(**config.config_comparison)
+comp.model_run()
 # %%
+
+
+covid = pd.read_csv("./data/00_external_data/grippemeldedienst-interpolated.csv")
+covid["date"] = covid["date"].to_datetime()
+covid.index = covid["date"]
+covid.drop(columns="date", inplace=True)
+covid.index = pd.to_datetime(covid.index)
+
+covid["daily_smooth"] = covid["influenza_daily"].rolling(7).mean()
+covid["2017-08-01":].plot()

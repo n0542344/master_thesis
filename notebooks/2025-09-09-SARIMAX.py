@@ -387,7 +387,7 @@ print("MaxE",   metrics.max_error(test_df[COLUMN], prediction_sarima2["Predictio
 
 
 #define exogenous variables
-exog_cols = ["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"]#, "new_cases_daily"] #"tlmax", "new_cases_weekly"
+exog_cols = ["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"]#, "influenza_daily"] #"tlmax", "influenza_weekly"
 n_obs = len(train_df) #number of ENDOgenous observations
 k_exog = len(exog_cols) #number of EXOG variables
 exog = np.empty([n_obs, k_exog]) #empty array
@@ -469,7 +469,7 @@ print("MaxE",   metrics.max_error(test_df[COLUMN], prediction_sarimax3["Predicti
 
 
 #define exogenous variables
-exog_cols = ["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"]#, "new_cases_daily"] #"tlmax", "new_cases_weekly"
+exog_cols = ["tlmin", "workday_enc", "holiday_enc", "day_of_week", "day_of_year"]#, "influenza_daily"] #"tlmax", "influenza_weekly"
 
 
 model_sarimax3 = SARIMAX(

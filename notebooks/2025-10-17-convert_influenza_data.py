@@ -22,11 +22,11 @@ df['year'] = df["Jahr"]#pd.to_datetime(df['Jahr'], format="%Y")
 # Apply the function to create the 'weekDate' column
 df['date'] = df.apply(lambda row: get_first_monday(row['year'], row['weeknum']), axis=1)
 #%%
-df = df.rename(columns={"Neuerkrankungen pro Woche": "new_cases_weekly"})
+df = df.rename(columns={"Neuerkrankungen pro Woche": "influenza_weekly"})
 df.index = pd.to_datetime(df["date"])
-df = df[["new_cases_weekly"]]
-df["new_cases_weekly"] = pd.to_numeric(df["new_cases_weekly"], errors="coerce")
-df["new_cases_daily"] = df["new_cases_weekly"]//7
+df = df[["influenza_weekly"]]
+df["influenza_weekly"] = pd.to_numeric(df["influenza_weekly"], errors="coerce")
+df["influenza_daily"] = df["influenza_weekly"]//7
 #TODO: linear interpolate
 # Add missing days
 # df.index = timeframe
@@ -38,8 +38,8 @@ new_index = pd.date_range(start=df.index[0], end=df.index[-1] + pd.Timedelta(day
 df = df.reindex(new_index)
 
 #forward fill new_cases weekly
-df["new_cases_weekly"] = df["new_cases_weekly"].ffill()
-#linearly interpolate new_cases_daily
-df["new_cases_daily"] = df["new_cases_daily"].interpolate(method="linear", limit=6, limit_direction="forward").round()
+df["influenza_weekly"] = df["influenza_weekly"].ffill()
+#linearly interpolate influenza_daily
+df["influenza_daily"] = df["influenza_daily"].interpolate(method="linear", limit=6, limit_direction="forward").round()
 
 

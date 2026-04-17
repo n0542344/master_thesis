@@ -68,7 +68,7 @@ df = df_original[START_DATE:END_DATE]
 #%% 
 # set variables
 data_x_col = "count"
-data_y_list = ["tlmin", "count", "tlmax", "new_cases_daily", "new_cases_weekly", "workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year"]
+data_y_list = ["tlmin", "count", "tlmax", "influenza_daily", "influenza_weekly", "workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year"]
 max_lag = 366
 
 #%%---------------------------------------
