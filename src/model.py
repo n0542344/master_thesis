@@ -1572,7 +1572,7 @@ class ModelSarimax(Model):
             #         seasonal_order=(self.P, self.D, self.Q, self.m)))
 
         elif self.model_params["exog_cols"] != None:
-            print("SARIMAX: in make_model/exog!=None")
+            # print("SARIMAX: in make_model/exog!=None")
             # exogenous = self.data[exog]
             model = SARIMAX(
                 endog=self.data.loc[window[0] : window[1], self.model_params["prediction_column"]],
@@ -2241,8 +2241,8 @@ class ModelProphet(Model):
         interval_width = (self.model_params["upper_limit"] - self.model_params["lower_limit"]) / 100
 
 
-        for k, v in self.model_params.items():
-            print(f"{k}: {v}")
+        # for k, v in self.model_params.items():
+        #     print(f"{k}: {v}")
 
         self.model = Prophet(
             yearly_seasonality=True,

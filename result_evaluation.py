@@ -239,3 +239,9 @@ plot_error_val_increase(results_overview, error_val=["RMSE", "MAE"], n=1000)
 # Plot time series with Actual, FC, upper/lower CI for all models:
 def plot_fc_time_series(model: pd.DataFrame):
     pass
+
+
+
+def forecast_blood_groups(model, params):
+    #Use the best param set to forecast individual blood groups
+    # ! Need to get use_transfused daily aggregate for individual groups!

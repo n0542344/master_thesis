@@ -27,7 +27,7 @@ SEED = 67
 
 #Same for all grids:
 PRED_COLUMN = "use_transfused"
-START_DATE = pd.to_datetime("2022-01-01")
+START_DATE = pd.to_datetime("2020-07-05") #start of abwassermonitoring
 TRAIN_PERCENT = 0.7 #list(np.arange(0.6, 0.8, 0.1)), 
 TEST_LEN = 14
 VALIDATION_TYPE = "rolling"
@@ -40,7 +40,7 @@ VALIDATION_TYPE = "rolling"
 #Wards are not implemented, because that would lead to data leakage, where sarimax would get a nearly perfect forecast!
 #(Because S/arima, prophet need the exogenous variables for the prediction period!)
 exog_types = {
-    "respiratory" : ["covid_weekly", "influenca_weekly"], #use forward filled values!
+    "respiratory" : ["covid_daily", "influenza_daily"], #use forward filled values!
     #"uses" : ["use_discarded", "use_expired"],
     #"wards" : ['ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC'],
     "days" : ["workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year"],
@@ -70,7 +70,7 @@ gs_config_arima = {
 }
 
 
-#currently 16384 combinations, if d/D is only set to one would be 4096
+#currently 35000 combinations, if d/D is only set to one would be 4096
 sarimax_n_samples = 1 #500 #set to <0 to get full grid (no sampling) or delete in main.py
 gs_config_sarimax = {
     "prediction_column" : [PRED_COLUMN],
@@ -86,13 +86,13 @@ gs_config_sarimax = {
     "P" : list(range(0,5)), #[0, 1],
     "D" : [0, 1], 
     "Q" : list(range(0,5)), #[0, 1],
-    "m" : [7, 14] #list(range(0,7))
+    "m" : [7] #list(range(0,7))
 }
 
 
 
 lstm_n_samples = 1 #-1 #set to <0 to get full grid (no sampling) or delete in main.py
-#currently 256 combinations
+#currently 224 combinations
 gs_config_lstm = {
     "prediction_column" : [PRED_COLUMN],
     "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),
@@ -116,8 +116,8 @@ gs_config_lstm = {
     "upper_limit" : [97.5]
 }
 
-#currently 288 combinations
-prophet_n_samples = 10
+#currently 378 combinations
+prophet_n_samples = 1
 gs_config_prophet = {
     "prediction_column" : [PRED_COLUMN],
     "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),

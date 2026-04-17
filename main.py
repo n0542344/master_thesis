@@ -239,10 +239,10 @@ def main():
 
     #Sample jobs now, to still have continuous global ids
     sampled_jobs = all_jobs
-    sampled_jobs["arima"] = sample_grid(sampled_jobs["arima"], n_samples=config.arima_n_samples) 
+    # sampled_jobs["arima"] = sample_grid(sampled_jobs["arima"], n_samples=config.arima_n_samples) 
     sampled_jobs["sarimax"] = sample_grid(sampled_jobs["sarimax"], n_samples=config.sarimax_n_samples) #keep? 
-    sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=config.lstm_n_samples)
-    sampled_jobs["prophet"] = sample_grid(sampled_jobs["prophet"], n_samples=config.prophet_n_samples)
+    # sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=config.lstm_n_samples)
+    # sampled_jobs["prophet"] = sample_grid(sampled_jobs["prophet"], n_samples=config.prophet_n_samples)
     
     # cores = 24#max(1, multiprocessing.cpu_count() - 1)
     # logger.info(f"---Using {cores} cores---")
@@ -324,6 +324,8 @@ def main():
             logger.warning(f"LSTM chunk {args.chunk} produced no valid results")
 
 
+    # comparison_model = model.ModelComparison()
+    # comparison_model.se
 
 
 
