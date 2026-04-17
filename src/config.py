@@ -145,7 +145,7 @@ config_comparison = {
     
     "single_value" : 535, #for single_value
     "start_date" : START_DATE, #for mean
-    "end_date" : pd.to_datetime("2025-07-03") #for mean
+    "end_date" : pd.to_datetime("2025-07-03") #for mean: should be end of last training window! #for simplicity, no rolling window implemented!
 
     # #individual comp. models (dataframes)
     # "single_value_df" : ,
