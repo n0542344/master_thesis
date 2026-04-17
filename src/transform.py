@@ -54,6 +54,7 @@ def transform_data(df,
         df = add_weather_data(df)
 
         df = add_influenza_data(df)
+        df = add_covid_data(df)
 
 
 
@@ -272,6 +273,60 @@ def add_influenza_data(df, influenza_data_path="data/00_external_data/", filenam
     return df
 
 
+def add_covid_data(df, data_path="data/00_external_data/", filename="abwassermonitoring", file_ending=".csv"):
+    #Load covid data from Abwassermonitoring dataset.
+    # If not yet interpolated, load the raw data abwassermonitoring.csv, forward fill 
+    # and divide by 7 to get daily data. 
+    # Scaled down by dividing through 1e14.
+    # Data is Fracht (GC/Tag), whole year (influenza from grippemeldung is only winter!)
+    # and influenza/RSA only start in 2022 in abwassermonitoring.
+
+    covid_interpolated_df = Path(data_path+filename+"-interpolated"+file_ending)
+
+    if covid_interpolated_df.is_file():
+        covid_interpolated_df = pd.read_csv(data_path+filename+"-interpolated"+file_ending, index_col="date")
+        # covid_interpolated_df = data_path.set_index("date")
+        covid_interpolated_df.index = pd.to_datetime(covid_interpolated_df.index)
+    else:
+        #Read raw and clean, interpolate linearly with forward fill to daily, dividy by 1E14, to scale down
+        covid_interpolated_df = pd.read_csv(
+            f"{data_path}{filename}{file_ending}", 
+            index_col="Datum", 
+            sep=";")
+        covid_interpolated_df.index = pd.to_datetime(covid_interpolated_df.index, format="%d.%m.%Y")
+        covid_interpolated_df = covid_interpolated_df.drop(covid_interpolated_df.columns[-1], axis=1)
+        covid_interpolated_df = covid_interpolated_df.query("Target == 'SARS-CoV-2'")
+        covid_interpolated_df = covid_interpolated_df.rename({covid_interpolated_df.columns[-1]:"covid_weekly", "Datum":"date"}, axis=1)
+        covid_interpolated_df["covid_weekly"] = covid_interpolated_df["covid_weekly"].str.replace(",", ".")
+        covid_interpolated_df["covid_weekly"] = (pd.to_numeric(covid_interpolated_df["covid_weekly"])
+                                        .div(1e11))#scale down
+
+        #make wide, only use SARS-CoV-2, as others only start in 2022 
+        #and have some missing values
+        covid_interpolated_df = covid_interpolated_df.pivot_table(
+                index=covid_interpolated_df.index, 
+                columns="Target", 
+                values="covid_weekly"
+        )
+        covid_interpolated_df = covid_interpolated_df.rename({"SARS-CoV-2":"covid_weekly"}, axis=1)
+            
+        #forward fill to daily:
+        covid_interpolated_df = covid_interpolated_df.resample("D").ffill() #no limit to fill gap in 2022
+        covid_interpolated_df["covid_daily"] = covid_interpolated_df["covid_weekly"].div(7).round(3)
+
+        #fill rest of the rows with zero (if present, should be none)
+        covid_interpolated_df = covid_interpolated_df.fillna(0)
+
+        #Save to file abwassermonitoring-interpolated.csv
+        covid_interpolated_df.to_csv(data_path+filename+"-interpolated"+file_ending, index_label="date")
+
+    df = pd.merge(df, covid_interpolated_df, left_index=True, right_index=True, how="left")
+    
+    return df
+
+
+
+
 #Make wide df, where every col value becomes its own col with daily freq count; prefix of original col name
 def make_wide(df):
     #see aggregate_categorical_cols!
@@ -328,8 +383,8 @@ def interpolate_influenza_data(filepath, filename, file_ending, save_file=True):
     # df['date'] = df.apply(lambda row: get_first_monday(row['year'], row['weeknum']), axis=1)
         
     # #rename + remove unnecessary cols (maybe could need Schwankungsbreite?)
-    # df.rename(columns={"Neuerkrankungen pro Woche": "new_cases_weekly"})
-    # df = df.loc[["date", "new_cases_weekly"]]
+    # df.rename(columns={"Neuerkrankungen pro Woche": "influenza_weekly"})
+    # df = df.loc[["date", "influenza_weekly"]]
 
     # #TODO: linear interpolate
     # # Add missing days
@@ -338,7 +393,7 @@ def interpolate_influenza_data(filepath, filename, file_ending, save_file=True):
     # df = df.reindex(timeframe, fill_value=None)
     
     # # Fill missing days with nan
-    # # Add new col new_cases_daily, which takes existing vals/7, then
+    # # Add new col influenza_daily, which takes existing vals/7, then
     # # interpolate these linearly
 
 
@@ -354,28 +409,42 @@ def interpolate_influenza_data(filepath, filename, file_ending, save_file=True):
     df['date'] = df.apply(lambda row: get_first_monday(row['year'], row['weeknum']), axis=1)
     
     #rename + remove unnecessary cols (maybe could need Schwankungsbreite?)
-    df = df.rename(columns={"Neuerkrankungen pro Woche": "new_cases_weekly"})
+    df = df.rename(columns={"Neuerkrankungen pro Woche": "influenza_weekly"})
     df.index = pd.to_datetime(df["date"])
-    df = df[["new_cases_weekly"]]
+    df = df[["influenza_weekly"]]
 
     #Convert to int; add daily cases
-    df["new_cases_weekly"] = pd.to_numeric(df["new_cases_weekly"], errors="coerce")
-    df["new_cases_daily"] = df["new_cases_weekly"]//7
+    df["influenza_weekly"] = pd.to_numeric(df["influenza_weekly"], errors="coerce")
 
-    # Add missing days
-    df.resample("D").asfreq()
+    df = df[["influenza_weekly"]].resample("D").ffill() # no limit, influenza doesnt go down to 0 in summer, just no monitoring!
+    # df["influenza_weekly"] = df["influenza_weekly"].ffill(limit=6)
+    df["influenza_daily"] = df["influenza_weekly"].div(7).round(3)
 
-    #Extend by one week (to interpolate last week which has no rows)
-    new_index = pd.date_range(start=df.index[0], end=df.index[-1] + pd.Timedelta(days=6), freq='D')
-    df = df.reindex(new_index)
-    df.index = pd.to_datetime(df.index)
+    #Extend to last date, fill with last value:
+    end_date = "2025-07-03"
+    df = df.reindex(pd.date_range(df.index[0], end_date, freq="D")).ffill()
 
-    #forward fill new_cases weekly
-    df["new_cases_weekly"] = df["new_cases_weekly"].ffill(limit=6)
-    #linearly interpolate new_cases_daily
-    df["new_cases_daily"] = df["new_cases_daily"].interpolate(method="linear", limit=6, limit_direction="forward").round()
+
     #fill rest of the rows with zero
     df = df.fillna(0)
+
+    # df["influenza_daily"] = df["influenza_weekly"].div(7)
+
+    # # Add missing days
+    # df = df.resample("D")
+
+    # #Extend by one week (to interpolate last week which has no rows)
+    # # new_index = pd.date_range(start=df.index[0], end=df.index[-1] + pd.Timedelta(days=6), freq='D')
+    # # df = df.reindex(new_index)
+    # # df.index = pd.to_datetime(df.index)
+
+    # #forward fill new_cases weekly
+    # df["influenza_weekly"] = df["influenza_weekly"].ffill(limit=6)
+    # #linearly interpolate influenza_daily
+    # # df["influenza_daily"] = df["influenza_daily"].interpolate(method="linear", limit=6, limit_direction="forward").round()
+    # df["influenza_daily"] = df["influenza_daily"].div(7)
+    # #fill rest of the rows with zero
+    # df = df.fillna(0)
 
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from numpy import nan
 
 from src import config
+from src import config_cleaning
 from src.utils import timer_func
 from os.path import commonprefix
 
@@ -68,10 +69,10 @@ def clean_data(df,
         #NOTE: could wrap in function 
         for col in ["EC_BG", "PAT_BG"]:
             df[col] = df[col].replace(nan, "nan") #np.nan
-            df[col] = df[col].replace(config.blood_group_map)
+            df[col] = df[col].replace(config_cleaning.blood_group_map)
         for col in ["EC_RH", "PAT_RH"]:
             df[col] = df[col].replace(nan, "nan") #np.nan
-            df[col] = df[col].replace(config.rhesus_factor_map)
+            df[col] = df[col].replace(config_cleaning.rhesus_factor_map)
             print(f"unique values in for loop: {pd.unique(df[col])}")
         print(f"unique values after for loop: {df.apply(lambda col: col.unique())}")
 
@@ -103,7 +104,7 @@ def clean_dates(df):
     # DONE Merge all date columns
     # DONE wrap in function
     date_cols = [col for col in df.columns if col.startswith("T_")] # or use map: date_cols = date_format_map.keys()
-    for col, kwargs in config.date_format_map.items():
+    for col, kwargs in config_cleaning.date_format_map.items():
         df[col] = pd.to_datetime(df[col], **kwargs).dt.date
 
     df = merge_to_new_col(df, date_cols, "date")
@@ -119,15 +120,15 @@ def clean_transfusion_status(df):
     # Transfusion status: Rename and merge
     # DONE wrap in function
 
-    # for col, val in config.transfusion_status_map.items():
+    # for col, val in config_cleaning.transfusion_status_map.items():
     #     df[col].replace(val, inplace=True) # NOTE'replace' doesnt change non-matching vals, 'map' changes them to NaN
     # transfusion_status_columns = [col for col in df.columns if col.startswith("ToD")]
 
-    for col in config.transfusion_cols:
-        df[col] = df[col].replace(config.transfusion_status_map) # NOTE'replace' doesnt change non-matching vals, 'map' changes them to NaN
+    for col in config_cleaning.transfusion_cols:
+        df[col] = df[col].replace(config_cleaning.transfusion_status_map) # NOTE'replace' doesnt change non-matching vals, 'map' changes them to NaN
 
     # DONE Rename to "DoT" or "Transfusion_date"
-    df = merge_to_new_col(df, columns_to_merge=config.transfusion_cols, new_name="use")
+    df = merge_to_new_col(df, columns_to_merge=config_cleaning.transfusion_cols, new_name="use")
 
     return df
 
@@ -148,13 +149,13 @@ def split_BG_RH(df, origin, temp_cols, target_cols):
 def parse_BG(df, column: str):
     #parses 'column' for BG and maps new values
     df[column] = df[column] #TODO:
-    #use config.blood_group_map
+    #use config_cleaning.blood_group_map
 
 @timer_func
 def parse_RH(df, column: str):
     #parses 'column' for RH and maps new values
     df[column] = df[column] #TODO:
-    #use config.rhesus_factor_map
+    #use config_cleaning.rhesus_factor_map
 
 
 # def split_BG_RH(df, origin, temp_cols, target_cols):
@@ -176,10 +177,10 @@ def parse_RH(df, column: str):
 #     # df[temp_cols[0]] = df[origin].replace(regex={r'^NBN.$': 'NBN', 'foo': 'xyz'})
 
 #     #Replace values with map. convert non-matching to 'Other'
-#     # for col in config.transfusion_cols:
-#     #     df[col] = df[col].replace(config.transfusion_status_map) # NOTE'replace' doesnt change non-matching vals, 'map' changes them to NaN
+#     # for col in config_cleaning.transfusion_cols:
+#     #     df[col] = df[col].replace(config_cleaning.transfusion_status_map) # NOTE'replace' doesnt change non-matching vals, 'map' changes them to NaN
 
-#     #         df[col] = df[col].where(df[col].isin(config.))
+#     #         df[col] = df[col].where(df[col].isin(config_cleaning.))
 
 
 
