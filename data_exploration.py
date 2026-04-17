@@ -138,13 +138,35 @@ for ward in ward_cols:
     viz.seasonal_plot(df_processed, plot_type="daily", col_name=ward)
 
 
+
+#%%
+#Simple line plot time series
+
+def plot_timeseries(df: pd.DataFrame, columns: list, title: str):
+    fig, ax = plt.subplots(figsize=(12,6))
+
+    for col in columns:
+        ax.plot(df.index, df[col], label=col, linewidth=0.25)
+
+    ax.set_title(title)
+    ax.set_xlabel("Date")
+    ax.legend()
+    plt.tight_layout()
+    plt.show
+
+plot_timeseries(df, columns=["use_transfused", "use_expired", "use_discarded"], title="Qucik plot")
+
+
+
 #%%
 #TODO: save data to csv
 # # Plot daily/weekly cases influenza
 # fig, ax = plt.subplots(1)
-# ax.plot(df_processed["new_cases_daily"])
-# ax.plot(df_processed["new_cases_weekly"], color="red")
+# ax.plot(df_processed["influenza_daily"])
+# ax.plot(df_processed["influenza_weekly"], color="red")
 # plt.show
+
+
 
 
 
