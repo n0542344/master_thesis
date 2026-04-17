@@ -14,7 +14,6 @@ SAVE_FIGS = False
 #Slice data while developing
 DEV_START_DATE = "2024-05-01"
 DEV_END_DATE = "2025-07-01"
-PRED_COLUMN = "use_transfused"
 
 #Set config for multiprocessing (doesnt work i think, but needs to be set)
 TOTAL_CORES = 4
@@ -26,9 +25,12 @@ SEED = 67
 
 
 
-
-
-
+#Same for all grids:
+PRED_COLUMN = "use_transfused"
+START_DATE = pd.to_datetime("2022-01-01")
+TRAIN_PERCENT = 0.7 #list(np.arange(0.6, 0.8, 0.1)), 
+TEST_LEN = 14
+VALIDATION_TYPE = "rolling"
 #----------------------------------------------------------------------------------------------------
 # MARK: Grid search options
 #----------------------------------------------------------------------------------------------------
@@ -56,10 +58,10 @@ exog_combinations_list = [list[1] for list in exog_combinations] + [None] #add e
 arima_n_samples = 1 #-1
 gs_config_arima = {
     "prediction_column" : [PRED_COLUMN],
-        
-    "train_percent" : [0.7], #arange(0.6, 0.8, 0.1),
-    "test_len" : [14],
-    "start_date" : [pd.to_datetime("2020-01-01")],
+    "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),
+    "test_len" : [TEST_LEN],
+    "start_date" : [START_DATE],
+
 
     "p" : list(range(0,7)),
     "d" : list(range(0,3)),
@@ -71,13 +73,11 @@ gs_config_arima = {
 sarimax_n_samples = 1 #500 #set to <0 to get full grid (no sampling) or delete in main.py
 gs_config_sarimax = {
     "prediction_column" : [PRED_COLUMN],
-    
-    "exog_cols" : exog_combinations_list,
-    
-    "train_percent" : [0.7], #arange(0.6, 0.8, 0.1),
-    "test_len" : [14],
-    "start_date" : [pd.to_datetime("2020-01-01")], #2022-01-01
+    "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),
+    "test_len" : [TEST_LEN],
+    "start_date" : [START_DATE],
     # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
+    "exog_cols" : exog_combinations_list,
 
     "p" : list(range(0,5)), #[0, 1], 
     "d" : [0, 1], #list(range(0,2)),
@@ -94,15 +94,15 @@ lstm_n_samples = 1 #-1 #set to <0 to get full grid (no sampling) or delete in ma
 #currently 256 combinations
 gs_config_lstm = {
     "prediction_column" : [PRED_COLUMN],
-
-    "validation_type" : ["rolling"], #, "expanding"],
+    "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),
+    "test_len" : [TEST_LEN],
+    "start_date" : [START_DATE],
+    # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
+    "validation_type" : [VALIDATION_TYPE], #, "expanding"],
     
     "exog_cols" : exog_combinations_list,
+    
     "inner_window" : [365], #365=default; in days (time steps)
-    "train_percent" : [0.7], #list(np.arange(0.6, 0.8, 0.1)), 
-    "test_len" : [14], #7
-    "start_date" : [pd.to_datetime("2020-01-01")],
-    # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
     
     "memory_cell" : [32, 64, 128, 256],
     "epochs" : [20, 100],
@@ -119,20 +119,39 @@ gs_config_lstm = {
 prophet_n_samples = 10
 gs_config_prophet = {
     "prediction_column" : [PRED_COLUMN],
-    
+    "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),
+    "test_len" : [TEST_LEN],
+    "start_date" : [START_DATE],
+    # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
+    "validation_type" : [VALIDATION_TYPE], #, "expanding"],
+        
+
     "exog_cols" : exog_combinations_list,
+
     "changepoint_prior_scale" : [0.001, 0.01, 0.05], #flexibility of trend changes
     "seasonality_mode" : ["additive", "multiplicative"], #default: additive
     "seasonality_prior_scale" : [0.1, 1, 10], #default: 10; modulates impact of seasonality effect, low=less impact
     "holidays_prior_scale" : [0.1, 1, 10], #default: 10; modulates impact of prior holidays
 
-    "train_percent" : [0.9], #0.7
-    "test_len" : [14],
-    "start_date" : [pd.to_datetime("2023-10-01")],
-    # "start_date" : [pd.to_datetime(day) for day in ["2024-01-01", "2015-01-01", "2022-01-01"]],
-
     "lower_limit" : [2.5],
     "upper_limit" : [97.5]
+}
+
+
+#Not run as grid search, so values not in list!
+config_comparison = {
+    "col" : PRED_COLUMN,
+    "forecast_window" : 14, #for plotting
+    
+    "single_value" : 535, #for single_value
+    "start_date" : START_DATE, #for mean
+    "end_date" : pd.to_datetime("2025-07-03") #for mean
+
+    # #individual comp. models (dataframes)
+    # "single_value_df" : ,
+    # "naive_df" : ,
+    # "mean_df" : ,
+    # "seasonal_naive_df" : None
 }
 
 

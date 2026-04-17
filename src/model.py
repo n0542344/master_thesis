@@ -911,6 +911,27 @@ class ModelComparison(Model):
     # Setters/Getters
     #------------------------------------------------------------------------------------------------
 
+    def set_parameters(
+            self,
+            col = None, #throughout all runs
+            single_value = None, #for single_value
+            forecast_window = None, #for plotting
+            start_date = None, 
+            end_date = None
+            ):
+        
+        #Needed parameters:
+        self.col = col #throughout all runs
+        self.forecast_window = forecast_window
+        self.single_value = single_value 
+        #for mean
+        self.start_date = start_date #for mean
+        self.end_date = end_date #for mean
+
+
+
+
+
     def set_forecast_window(self, days=14):
         """This is for plotting purposes only. Since models have forecast
         window, with days-ahead plotting/stats, i want to keep this
