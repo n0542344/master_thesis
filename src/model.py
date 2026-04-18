@@ -31,6 +31,8 @@ from keras import Input, layers, Model
 # tf.config.threading.set_intra_op_parallelism_threads(1)
 # tf.config.threading.set_inter_op_parallelism_threads(1)
 
+import logging
+
 
 from prophet import Prophet
 
@@ -364,6 +366,11 @@ class Model:
         self.file_path = "./results/"+self.dir_name
         Path(self.file_path).mkdir(parents=True, exist_ok=True)
 
+    def save_params(self):
+        #make params json
+        with open("./results/"+self.dir_name+"/params.json", "w") as f:
+            json.dump(self.model_params, f)
+
     #@timer_func
     def save_results(self):
         #Creates new directory where it saves self.model_params as a json and every dataframe for the results
@@ -383,9 +390,9 @@ class Model:
         # file_path = "./results/"+dir_name
         # Path(file_path).mkdir(parents=True, exist_ok=True)
 
-        #make params json
-        with open("./results/"+self.dir_name+"/params.json", "w") as f:
-            json.dump(self.model_params, f)
+        # #make params json
+        # with open("./results/"+self.dir_name+"/params.json", "w") as f:
+        #     json.dump(self.model_params, f)
         #make stats json
         with open("./results/"+self.dir_name+"/stats.json", "w") as f:
             json.dump(self.stats, f)
@@ -1040,6 +1047,8 @@ class ModelComparison(Model):
         #initiate 'result'
         self.predictions = self.data[[config.PRED_COLUMN]]
 
+        self.save_params()
+
         #Run all comparison models
         self.predictions["single_value"] = self.run_single_value(single_value=self.single_value, model_run=True)
         self.predictions["naive"] = self.run_naive(col=self.col, model_run=True)
@@ -1236,6 +1245,7 @@ class ModelArima(Model):
         """
         #TODO: Update docstring
         self.create_result_dir()
+        self.save_params()
 
         all_windows_start = time.time()
 
@@ -1502,7 +1512,7 @@ class ModelSarimax(Model):
         """
 
         self.create_result_dir()
-
+        self.save_params()
         #TODO: Write docstring
         all_windows_start = time.time()
 
@@ -1548,9 +1558,9 @@ class ModelSarimax(Model):
         # series = self.data[pred_col]
         #TODO: !use SARIMAX instead of ARIMA!
 
-        print(f"SARIMAX: in make model, exog: {self.model_params['exog_cols']}", flush=True)
+        # print(f"SARIMAX: in make model, exog: {self.model_params['exog_cols']}", flush=True)
         if self.model_params["exog_cols"]  == None:
-            print(f"SARIMAX: in make model/exog=None, exog: {self.model_params['exog_cols']}", flush=True)
+            # print(f"SARIMAX: in make model/exog=None, exog: {self.model_params['exog_cols']}", flush=True)
 
             model = SARIMAX(
                 endog=self.data.loc[window[0] : window[1], self.model_params["prediction_column"]],
@@ -1774,6 +1784,9 @@ class ModelLSTM(Model):
     def __init__(self, data, id=None): #TODO: maybe add config, but more sense in base class imo
         super().__init__(data)
 
+        #Logger to check process, as lstm takes longer than the others:
+        self.logger = logging.getLogger(__name__)
+
         #LSTM-specific variable inits
         self.model = None
 
@@ -1870,6 +1883,7 @@ class ModelLSTM(Model):
         # expanding/rolling window needs to be set already!
         #TODO: Write docstring
         self.create_result_dir()
+        self.save_params()
 
         all_windows_start = time.time()
 
@@ -1880,13 +1894,17 @@ class ModelLSTM(Model):
         self.get_training_test_set()
         self.build_model()
         
-        print(f"\nRunning {self.stats['id']} with {len(self.validation_sets)} windows", flush=True)
-        print(f"Calculating {self.model_params['epochs']} epochs")
-        print(f"Loading weights from: {self.dir_name}, {self.file_path}", flush=True)
+        self.logger.info(f"---- LSTM Starting: {self.stats['id']}; {len(self.validation_sets)} windows ---") 
+        # print(f"\nRunning {self.stats['id']} with {len(self.validation_sets)} windows", flush=True)
+        # print(f"Calculating {self.model_params['epochs']} epochs")
+        # print(f"Loading weights from: {self.dir_name}, {self.file_path}", flush=True)
 
         #Simulate individual past forecasts with windows:
         for i, window in enumerate(self.validation_sets):
-            print(f"({self.stats['id']})Window {i}/{len(self.validation_sets)}", flush=True)
+            # if i%10 == 0:
+            self.logger.info(f"{self.stats['id']}: {i}/{len(self.validation_sets)}") 
+            
+            #print(f"({self.stats['id']})Window {i}/{len(self.validation_sets)}", flush=True)
             
             self.model.load_weights(self.file_path+"/initial.weights.h5")#, skip_mismatch=True, by_name=False)
             
@@ -2145,6 +2163,7 @@ class ModelProphet(Model):
         #params are model parameters
         # days are days to predict
         self.create_result_dir()
+        self.save_params()
 
         all_windows_start = time.time()
 

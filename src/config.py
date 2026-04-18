@@ -16,8 +16,8 @@ DEV_START_DATE = "2024-05-01"
 DEV_END_DATE = "2025-07-01"
 
 #Set config for multiprocessing (doesnt work i think, but needs to be set)
-TOTAL_CORES = 4
-TOTAL_RAM_GB = 10
+TOTAL_CORES = 30 #4
+TOTAL_RAM_GB = 160 #8
 RAM_PER_WORKER = TOTAL_RAM_GB / TOTAL_CORES 
 
 #For random sampling reproducibility
@@ -28,7 +28,7 @@ SEED = 67
 #Same for all grids:
 PRED_COLUMN = "use_transfused"
 START_DATE = pd.to_datetime("2020-07-05") #start of abwassermonitoring
-TRAIN_PERCENT = 0.7 #list(np.arange(0.6, 0.8, 0.1)), 
+TRAIN_PERCENT = 0.8 #0.8 #0.7-> zu lange! #list(np.arange(0.6, 0.8, 0.1)), 
 TEST_LEN = 14
 VALIDATION_TYPE = "rolling"
 #----------------------------------------------------------------------------------------------------
@@ -56,7 +56,7 @@ exog_combinations_list = [list[1] for list in exog_combinations] + [None] #add e
 #Ranges of options for grid search
 
 #currently 147 combinations (just multiply n for each param: 1*1*1*1*7*3*7=147)
-arima_n_samples = 1 #-1
+# arima_n_samples = 1 #-1
 gs_config_arima = {
     "prediction_column" : [PRED_COLUMN],
     "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),
@@ -70,8 +70,8 @@ gs_config_arima = {
 }
 
 
-#currently 35000 combinations, if d/D is only set to one would be 4096
-sarimax_n_samples = 1 #500 #set to <0 to get full grid (no sampling) or delete in main.py
+#currently 17500 combinations, if d/D is only set to one would be 4096
+sarimax_n_samples = 1000 #500 #set to <0 to get full grid (no sampling) or delete in main.py
 gs_config_sarimax = {
     "prediction_column" : [PRED_COLUMN],
     "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),
@@ -91,8 +91,9 @@ gs_config_sarimax = {
 
 
 
-lstm_n_samples = 1 #-1 #set to <0 to get full grid (no sampling) or delete in main.py
+# lstm_n_samples = 1 #-1 #set to <0 to get full grid (no sampling) or delete in main.py
 #currently 224 combinations
+# lstm_n_samples = 1
 gs_config_lstm = {
     "prediction_column" : [PRED_COLUMN],
     "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),
@@ -103,7 +104,7 @@ gs_config_lstm = {
     
     "exog_cols" : exog_combinations_list,
     
-    "inner_window" : [365], #365=default; in days (time steps)
+    "inner_window" : [1000], #[780], #[1200] länger is schneller! [912], #train len: (1825*0.7)-14=1263.5 -> 1263 - 365 = 898 => 365 tage für val in training,
     
     "memory_cell" : [32, 64, 128, 256],
     "epochs" : [20, 100],
@@ -117,7 +118,7 @@ gs_config_lstm = {
 }
 
 #currently 378 combinations
-prophet_n_samples = 1
+# prophet_n_samples = 1
 gs_config_prophet = {
     "prediction_column" : [PRED_COLUMN],
     "train_percent" : [TRAIN_PERCENT], #arange(0.6, 0.8, 0.1),

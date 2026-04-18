@@ -2,8 +2,8 @@
 
 #Created with claude
 # ── Configuration (chunks are LSTM only) ────────────────────────────────────────────────────────────
-TOTAL_CHUNKS=4 #10 #20         # one per core, adjust to available cores
-RAM_PER_CHUNK=1 #4 #in GB
+TOTAL_CHUNKS=25   #10 #20         # one per core, adjust to available cores
+RAM_PER_CHUNK=10 #8   #4 #in GB
 PYTHON="/home/lukasu/miniconda3/envs/thesis_311/bin/python3" #"python3.12"        # adjust if needed, e.g. python3.11
 SCRIPT="main.py"
 LOG_DIR="./logs/lstm_chunks"

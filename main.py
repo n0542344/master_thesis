@@ -9,13 +9,14 @@ import argparse #to run different python files for lstm
 # os.environ["TF_DATA_EXPERIMENTAL_DISABLE_THREADING"] = "1"
 
 #TODO: Still necessary after changing to different python files for concurrent running?
-os.environ["OMP_NUM_THREADS"] = "4"      # change to however many you want
-os.environ["TF_NUM_INTRAOP_THREADS"] = "4"
-os.environ["TF_NUM_INTEROP_THREADS"] = "4"
+# 2 seems to be quickest.
+os.environ["OMP_NUM_THREADS"] = "2"      # change to however many you want
+os.environ["TF_NUM_INTRAOP_THREADS"] = "2"
+os.environ["TF_NUM_INTEROP_THREADS"] = "2"
 
 #ignore/suppress keras logs:
-os.environ["KERAS_VERBOSE"] = "0"
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+# os.environ["KERAS_VERBOSE"] = "0"
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import pandas as pd
 import numpy as np
