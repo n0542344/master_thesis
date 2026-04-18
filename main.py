@@ -245,6 +245,13 @@ def main():
     # sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=config.lstm_n_samples)
     # sampled_jobs["prophet"] = sample_grid(sampled_jobs["prophet"], n_samples=config.prophet_n_samples)
     
+    total_jobs_num = sum(len(v) for v in sampled_jobs.values())
+    logger.info(f"--- Total number of Jobs: {len(total_jobs_num)} ---")
+    logger.info(f"--- Arima:   {len(sampled_jobs['arima'])} ---")
+    logger.info(f"--- Sarimax: {len(sampled_jobs['sarimax'])} ---")
+    logger.info(f"--- LSTM:    {len(sampled_jobs['lstm'])} ---")
+    logger.info(f"--- Prophet: {len(sampled_jobs['prophet'])} ---")
+
     # cores = 24#max(1, multiprocessing.cpu_count() - 1)
     # logger.info(f"---Using {cores} cores---")
     logger.info(f"---Using {config.TOTAL_CORES} cores with max {config.TOTAL_RAM_GB} GB RAM---")
