@@ -124,14 +124,15 @@ def combine_wards(df, ward_map_path="./data/00_external_data/wards_mapping.csv",
     #Load necessary data
     ward_map = pd.read_csv(ward_map_path, sep="\t")
     ward_map["Kostenstelle"] = ward_map["Kostenstelle"].str.strip() #remove whitespaces around strings
+    ward_map = ward_map.drop_duplicates(subset="Kostenstelle")
     # ward_map = pd.concat(ward_map, pd.DataFrame(["Other", "Other"]))
 
     #NOTE:Apparently decided not to do (see docstring):
     #NOTE: i think the idea was, to only map 'perfect' matches.
     # keep only firsst 5 letters of 'Kostenstelle'/'PAT_WARD', to remove submapping
     # as not all full codes from 'PAT_WARDS' are in 'Kostenstelle' 
-    ward_map["Kostenstelle"] = ward_map["Kostenstelle"].str[:4] 
-    df["PAT_WARD"] = df["PAT_WARD"].str[:4] 
+    # ward_map["Kostenstelle"] = ward_map["Kostenstelle"].str[:4] 
+    # df["PAT_WARD"] = df["PAT_WARD"].str[:4] 
 
     # Merge short code (2-letter code) onto df, fill missing values with NA
     df = (
@@ -146,6 +147,17 @@ def combine_wards(df, ward_map_path="./data/00_external_data/wards_mapping.csv",
         .set_index("date")
         .fillna({"ID_Kostenstelle":"Other"}) 
     )
+    # df = (
+    #     df.join(
+    #         other=ward_map[["ID_Kostenstelle", "Kostenstelle"]].set_index("Kostenstelle"), 
+    #         on="PAT_WARD", 
+    #         how="left"
+    #     )
+    #     #.drop("Kostenstelle", axis=1)
+    #     .set_index("date")
+    #     .fillna({"ID_Kostenstelle":"Other"}) 
+    # )
+
 
     # Helper variable: Create count+ranking and Map of ID_Kostenstelle/Kostenstelle/top_wards
     # (top_wards = top 5 ranking wards keep their names, rest get assigned as 'Other')
