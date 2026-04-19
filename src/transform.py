@@ -99,7 +99,7 @@ def aggregate_categorical_cols(df, cols_to_sum: dict):
     
     return wide_df
 
-def combine_wards(df, ward_map_path="./data/00_external_data/wards_mapping.csv"):
+def combine_wards(df, ward_map_path="./data/00_external_data/wards_mapping.csv", top_N=5):
     """
     Combines wards first to main wards (around 50?), then calculates top 5 and puts the rest in other.
 
@@ -118,6 +118,7 @@ def combine_wards(df, ward_map_path="./data/00_external_data/wards_mapping.csv")
     Args:
         df (DataFrame): Main dataframe
         ward_map_path (str): Location of csv file for mapping of wards
+        top_N (int): Amount of individual wards to keep, rest to Other
     """
 
     #Load necessary data
@@ -125,6 +126,12 @@ def combine_wards(df, ward_map_path="./data/00_external_data/wards_mapping.csv")
     ward_map["Kostenstelle"] = ward_map["Kostenstelle"].str.strip() #remove whitespaces around strings
     # ward_map = pd.concat(ward_map, pd.DataFrame(["Other", "Other"]))
 
+    #NOTE:Apparently decided not to do (see docstring):
+    #NOTE: i think the idea was, to only map 'perfect' matches.
+    # keep only firsst 5 letters of 'Kostenstelle'/'PAT_WARD', to remove submapping
+    # as not all full codes from 'PAT_WARDS' are in 'Kostenstelle' 
+    ward_map["Kostenstelle"] = ward_map["Kostenstelle"].str[:4] 
+    df["PAT_WARD"] = df["PAT_WARD"].str[:4] 
 
     # Merge short code (2-letter code) onto df, fill missing values with NA
     df = (
@@ -149,7 +156,7 @@ def combine_wards(df, ward_map_path="./data/00_external_data/wards_mapping.csv")
         .sort_values(by="amount", ascending=False).reset_index()
         .assign(rank = lambda x: x["amount"].where(x["ID_Kostenstelle"] != "Other").rank(ascending=False)) #Exclude 'Other' from ranking.  Other == where no (existing) ID_Kostenstelle was matching.
         .assign(top_wards = lambda x: np.where(
-            (x["rank"] <= 5) | (x["rank"].isna()), x["ID_Kostenstelle"], "Other"))
+            (x["rank"] <= top_N) | (x["rank"].isna()), x["ID_Kostenstelle"], "Other"))
         #.assign(top_wards = lambda x: np.where(x["ID_Kostenstelle"] == "Other", "Other"))
     )
 
