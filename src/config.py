@@ -40,10 +40,10 @@ VALIDATION_TYPE = "rolling"
 #Wards are not implemented, because that would lead to data leakage, where sarimax would get a nearly perfect forecast!
 #(Because S/arima, prophet need the exogenous variables for the prediction period!)
 exog_types = {
-    "respiratory" : ["covid_daily", "influenza_daily"], #use forward filled values!
+    "respiratory" : ['covid_daily_scaled', 'influenza_daily_scaled'], #use forward filled values!
     #"uses" : ["use_discarded", "use_expired"],
     #"wards" : ['ward_AN', 'ward_CH', 'ward_I1', 'ward_I3', 'ward_Other', 'ward_UC'],
-    "days" : ["workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year"],
+    "days" : ["workday_enc", "holiday_enc", "day_of_week", "day_of_year", "year_scaled"],
     "weather" : ["tlmin", "tlmax"]
 }
 
