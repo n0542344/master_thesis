@@ -31,7 +31,7 @@ df_abwasser = pd.read_csv(
     sep=";")
 df_abwasser.index = pd.to_datetime(df_abwasser.index, format="%d.%m.%Y")
 df_abwasser = df_abwasser.drop(df_abwasser.columns[-1], axis=1)
-df_abwasser = df_abwasser.query("Target == 'SARS-CoV-2'")
+# df_abwasser = df_abwasser.query("Target == 'SARS-CoV-2'")
 df_abwasser = df_abwasser.rename({df_abwasser.columns[-1]:"covid_weekly", "Datum":"date"}, axis=1)
 df_abwasser["covid_weekly"] = df_abwasser["covid_weekly"].str.replace(",", ".")
 df_abwasser["covid_weekly"] = (pd.to_numeric(df_abwasser["covid_weekly"])

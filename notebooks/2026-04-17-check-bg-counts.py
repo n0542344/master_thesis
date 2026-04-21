@@ -40,10 +40,15 @@ df_clean.head()
 # hat separate quelle, ist nicht einfach duplizierte werte).
 # In ToD_N (wo abkürzungen, VRN, AUS, etc. verwendet werden), ist oft, nicht immer,
 # PAT_BG_RH 'missing value' --> sollte so sein
+# ==> wie weit ist das relevant? Weil use_transfused/discarded/expired sollten davon
+# nicht betroffen sein, und v.a. nicht use_transfused, brauche nur das
+# brauche die ganzen PAT_BG_RH_... nicht, oder?
 
 #ToD
-df_raw[df_raw["ToD"].isin(['Abgelaufen', 'Verkauft', 'Ausgegeben'])][["ToD", "PAT_BG", "PAT_RH", "ToD_N", "PAT_BG_RH"]]
+#Entferte werte ToD: "'Ausgegeben'"
+df_raw[df_raw["ToD"].isin(['Abgelaufen', 'Verkauft'])][["ToD", "PAT_BG", "PAT_RH", "ToD_N", "PAT_BG_RH"]]
 
 
 #ToD_N
-df_raw[df_raw["ToD_N"].isin(['VRN', 'ABG', 'END', 'RET', 'RES'])][["ToD", "PAT_BG", "PAT_RH", "ToD_N", "PAT_BG_RH"]]
+#entfernte Werte ToD_N: 'VRN', "AUS"
+df_raw[df_raw["ToD_N"].isin(['ABG', 'END', 'RET', 'RES'])][["ToD", "PAT_BG", "PAT_RH", "ToD_N", "PAT_BG_RH"]]
