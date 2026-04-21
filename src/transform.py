@@ -63,7 +63,7 @@ def transform_data(df,
         df["year_scaled"] = df["year"] - df["year"].min()
 
         scaler = StandardScaler()
-        df['covid_daily_scaled', 'influenza_daily_scaled'] = scaler.fit_transform(df['covid_daily', 'influenza_daily'])
+        df[["covid_daily_scaled", "influenza_daily_scaled"]] = scaler.fit_transform(df[["covid_daily", "influenza_daily"]])
 
 
 
@@ -142,7 +142,7 @@ def combine_wards(df, ward_map_path="./data/00_external_data/wards_mapping.csv",
     # as not all full codes from 'PAT_WARDS' are in 'Kostenstelle' 
     # ward_map["Kostenstelle"] = ward_map["Kostenstelle"].str[:4] 
     # df["PAT_WARD"] = df["PAT_WARD"].str[:4] 
-    print(f"vorher: {len(df)}", flush=True)
+    # print(f"vorher: {len(df)}", flush=True)
     # Merge short code (2-letter code) onto df, fill missing values with NA
     df = (
         pd.merge(
@@ -156,7 +156,7 @@ def combine_wards(df, ward_map_path="./data/00_external_data/wards_mapping.csv",
         .set_index("date")
         .fillna({"ID_Kostenstelle":"Other"}) 
     )
-    print(f"nachher: {len(df)},  flush=True")
+    # print(f"nachher: {len(df)},  flush=True")
     # df = (
     #     df.join(
     #         other=ward_map[["ID_Kostenstelle", "Kostenstelle"]].set_index("Kostenstelle"), 
