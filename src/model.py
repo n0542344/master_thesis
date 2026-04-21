@@ -1610,7 +1610,7 @@ class ModelSarimax(Model):
 
     #@timer_func
     def fit(self, model):
-        return model.fit(maxiter=50)
+        return model.fit()
 
 
     #NOTE: seems to be out of use
