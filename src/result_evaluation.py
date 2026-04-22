@@ -296,14 +296,14 @@ def load_fc_error_by_id_as_df(result_id: int, model_name: str, results_path=rcon
     path = glob.glob(f"{results_path}/{model_name_path}/{result_id}_*/forecast_errors.csv")[0]
 
     fc_err_df = pd.read_csv(path, index_col=0, sep=";")
-    fc_err_df.assign(id=result_id, model=model_name)
+    fc_err_df = fc_err_df.assign(id=result_id, model=model_name)
 
     return fc_err_df
 
 
 
 
-def load_model_resuls_by_id_as_df(model_name: str, result_id: int, get_all_days=True, results_path=rconf.RESULTS_PATH):
+def load_model_results_by_id_as_df(model_name: str, result_id: int, get_all_days=True, results_path=rconf.RESULTS_PATH):
     """Loads whole forecast results (Day_XX) for specified id+model
     Load the directory into a single dictionary, with all day-ahead fc results as well as the stats, params etc.
 
@@ -316,7 +316,6 @@ def load_model_resuls_by_id_as_df(model_name: str, result_id: int, get_all_days=
     else:
         model_name = model_name.capitalize() #Important!
 
-    print(model_name, result_id)
     path_pattern = os.path.join(f"{results_path}/{model_name}/{result_id}_*/Day_*.csv")
     files = sorted(glob.glob(path_pattern))
 
@@ -395,8 +394,10 @@ def merge_stats_params_to_id(df: pd.DataFrame, stats_params_dict: dict, key_map:
     stats_params_df = (pd.DataFrame(
         [stats_params_dict[model][id]],
         index=[id])
-        .pipe(add_exog_key, key_map=key_map)
+        # .pipe(add_exog_key, key_map=key_map)
     )
+    if model != "arima":
+        stats_params_df = stats_params_df.pipe(add_exog_key, key_map=key_map)
     
     df = pd.merge(df, stats_params_df, how="left", left_on="id", right_index=True)
     return df
@@ -482,10 +483,6 @@ def add_params_to_overview():
     pass
 
 
-# Over/Underprediction day counts, Max Over/Underprediction values
-def get_forecast_by_id():
-    #input: model name, id as dict/df for best model
-    pass
 
 
 #Get best by exog_cols combination:
@@ -607,7 +604,7 @@ def make_latex_table_over_underprediction_days(df: pd.DataFrame, chapter="05",
     #     "\\toprule",  "\\multicolumn{2}{c}{\\textbf{" + model_name.capitalize() + "}} \\\\\\midrule"
     # )
 
-    with open(f"{tbl_path}/{chapter}_{tbl_name}_all.txt", "w") as f:
+    with open(f"{tbl_path}/{chapter}_all_{tbl_name}.txt", "w") as f:
         f.write(latex_tbl)
 
     
@@ -646,11 +643,53 @@ def plot_results_by_exogenous():
     pass
 
 
+def plot_forecast_errors_per_day(df: pd.DataFrame, save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="forecast_error_per_day_ahead")->None:
+    #Takes dataframe, containing a single models forecast errors for each day ahead
+
+    if len(df["model"].unique()) & len(df["id"].unique()) == 1:
+        model_name = df["model"][0]
+        model_id = df["id"][0]
+    else:
+        raise ValueError("Either 'model' or 'id' are not unique!")
+
+    #Get extra day column, to sort by:
+    df = df.assign(day=lambda r: r.index.str.split("_").str[1].astype(int))
+    df = (df
+          .set_index("day")
+          .sort_index()
+          .drop(["model", "id", "MSE"], axis=1) #MSE is too high to compare and already in RMSE
+          .assign(MAPE=lambda c: c["MAPE"]*100)
+    )
+    # n_days = len(df["day"].unique())
+
+    #plotting
+    fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
+    for col in df.columns:
+        ax.plot(df[col], label=col)
+
+    ax.set_xlabel("Days ahead")
+    ax.set_ylabel("Error value")
+    ax.set_ylim(ymin=min(0, ax.get_ylim()[0])) #either zero or previous value
+
+    ax.legend(
+        loc="lower center", 
+        ncol=df.shape[1],
+        frameon=False,
+        bbox_to_anchor=(0.5, -0.15, 0, 0), #l/b/r/h
+    )
+
+    fig.subplots_adjust(bottom=0.75)
+    fig.suptitle(f"Forecast errors for all Day-ahead forecasts for {model_name.capitalize()} (ID: {model_id})")
+
+
+    if save_fig:
+        save_plot(fig, img_name, model_name, img_path)
 
 
 
 #plot each model error values by rank to show decrease by ordering
-def plot_error_val_increase(res_dict, error_val: list=["RMSE"], n: int=100, img_name: str="05_RES_error_increase_by_rank"):
+def plot_error_val_increase(res_dict, error_val: list=["RMSE"], n: int=100, 
+                            img_name: str="05_RES_error_increase_by_rank"):
     """plot each model error values by rank to show decrease by ordering
 
     Args:
@@ -766,7 +805,8 @@ def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True,
     fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
 
     ax.plot(df["Actual"], label="Actual", lw=2, color=(0.1, 0.1, 0.1))
-    ax.plot(df["Mean"], label="Forecast", lw=2, color="violet")
+    ax.plot(df["Mean"], label="Forecast", lw=2, color=rconf.m_cmap[model_name])#"violet")
+    ax.set_ylim(ymin=0)
 
     if diff_color:
         # Postiv/Neg untersch. fill-between
@@ -774,7 +814,7 @@ def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True,
         ax.fill_between(x=df.index, y1=df["Actual"], y2=df["Mean"], where=(df["Actual"]<df["Mean"]), interpolate=True, label="Overprediction", color="lightblue", alpha=0.3)
     else:
         # Einfärbiger fill-between
-        ax.fill_between(x=df.index, y1=df["Actual"], y2=df["Mean"], label="Difference", color="blue", alpha=0.25)
+        ax.fill_between(x=df.index, y1=df["Actual"], y2=df["Mean"], label="Difference", color=rconf.m_cmap[model_name], alpha=0.25) #color="blue"
 
     ax.set_xlabel("Date")
     ax.set_ylabel("EC transfused")
@@ -839,6 +879,7 @@ def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=
 
     ax.set_xlabel("Date")
     ax.set_ylabel("EC transfused")
+    ax.set_ylim(ymin=0)
 
     from matplotlib.patches import Patch
     legend_elements = [
@@ -886,13 +927,15 @@ def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str="2025-01-01", en
     fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
 
     ax.plot(df["Actual"], label="Actual", lw=2, color=(0.1, 0.1, 0.1))
-    ax.plot(df["Mean"], label="Forecast", lw=2, color="mediumvioletred")
-    ax.plot(df["Upper"], color="violet", lw=0.15, alpha=0.5)
-    ax.plot(df["Lower"], color="violet", lw=0.15, alpha=0.5)
-    ax.fill_between(x=df.index, y1=df["Lower"], y2=df["Upper"], label="95% CI", color="violet", alpha=0.2)
+    ax.plot(df["Mean"], label="Forecast", lw=2,  color=rconf.m_cmap[model_name])#color="mediumvioletred")
+    ax.plot(df["Upper"], color=rconf.m_cmap[model_name], lw=0.15, alpha=0.5) #color="violet",
+    ax.plot(df["Lower"], color=rconf.m_cmap[model_name], lw=0.15, alpha=0.5) #color="violet",
+    ax.fill_between(x=df.index, y1=df["Lower"], y2=df["Upper"], label="95% CI", color=rconf.m_cmap[model_name], alpha=0.2) #color="violet",
 
     ax.set_xlabel("Date")
     ax.set_ylabel("EC transfused")
+    ax.set_ylim(ymin=0)
+
     ax.legend(loc="lower right", ncol=4)
 
     fig.subplots_adjust(bottom=0.75)
@@ -904,7 +947,7 @@ def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str="2025-01-01", en
 
 def plot_all_fc_days(df, start_date: str="2025-01-01", end_date: str=None, 
                      save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="All_days")->None:
-    #Plots time series, with all (14) fc days at once, overlapping each other
+    #Plots time series, with all (14) fc days at once (of one model), overlapping each other
     #df needs to contain all forecasts of all days ahead
     if not end_date:
         end_date = df.index.max()
@@ -931,6 +974,7 @@ def plot_all_fc_days(df, start_date: str="2025-01-01", end_date: str=None,
 
     ax.set_xlabel("Date")
     ax.set_ylabel("EC transfused")
+    ax.set_ylim(ymin=0)
 
 
     #Colorbar for legend
@@ -966,6 +1010,59 @@ def plot_all_fc_days(df, start_date: str="2025-01-01", end_date: str=None,
     if save_fig:
         save_plot(fig, img_name, model_name, img_path)
 
+
+
+def plot_all_model_forecasts(best_models_id_name: pd.DataFrame, day_ahead: int=1, start_date: str="2025-05-01", end_date: str=None, 
+                     save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="models_best_forecast")->None:
+    """Plots time series, with all (4) models best (passed) results on the same time scale, overlapping each other.
+    df needs to contain all forecasts of all days ahead for all models.
+    Takes a df with model and id columns as input, then iterates over them and loads data for each model sequentially using 
+    load_model_results_by_id_as_df
+    df: pd.DataFrame containing columns id and model
+    day_ahead: which day to plot, usually only first"""
+
+    n_models = best_models_id_name.shape[0]
+    #Plotting
+    fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
+
+    cmap = plt.get_cmap("Set1")
+    #norm = mcolors.Normalize(vmin=1, vmax=n_models)
+
+    for i, model in enumerate(best_models_id_name["model"]):
+        #individual data prep
+        df = load_model_results_by_id_as_df(model_name=model, result_id=best_models_id_name.query("model == @model")["id"].values[0])
+        print(df.head())
+        if not end_date:
+            end_date = df.index.max()
+
+        df = df.query("day == @day_ahead").loc[start_date:end_date, ]
+
+        #plot Actual value only once
+        if i == 0:
+            ax.plot(df["Actual"], label="Actual", lw=1.5, color=(0.1, 0.1, 0.1), zorder=999)
+
+        #individual plotting
+        ax.plot(df["Mean"], color=cmap(i), label=model.capitalize(), lw=1) #label=f"Day {day}",  cmap(day/n_days)cmap(norm(i)),
+
+
+    ax.set_xlabel("Date")
+    ax.set_ylabel("EC transfused")
+    ax.set_ylim(ymin=0)
+
+    ax.legend(
+        loc="lower left",
+        frameon=False,
+        #ncol=1,
+        ncol=n_models + 1,
+        bbox_to_anchor=(0.5, -0.15)
+    )
+
+    # fig.subplots_adjust(bottom=0.15)
+    fig.suptitle(f"{day_ahead}-Day forecast for all models")
+
+    if save_fig:
+        model_name = "All"
+        save_plot(fig, img_name, model_name, img_path)
 
 
 

@@ -142,7 +142,7 @@ for model in best_model_ids["model"].unique():
         "\\toprule",  "\\multicolumn{7}{c}{\\textbf{" + model.capitalize() + "}} \\\\\\midrule"
     )
 
-    with open(f"{rconf.TBL_PATH}/05_tbl_overview_grouped_exog_cols_{model}.txt", "w") as f:
+    with open(f"{rconf.TBL_PATH}/05_{model}_tbl_overview_grouped_exog_cols.txt", "w") as f:
         f.write(best_model_ids_latex)
 
 
@@ -156,26 +156,33 @@ best_models_id_name = (best_model_ids
                 .head(1)
                 .loc[:, ["id", "model"]]
 )
-# #Now get for each the fc days
-sarimax_best_fc = eval.load_model_resuls_by_id_as_df(model_name="sarimax", result_id=best_models_id_name.query("model == 'sarimax'")["id"].values[0])
-sarimax_over_underpred_counts = eval.get_overprediction_underprediction_days(sarimax_best_fc, day_ahead=1)
-eval.make_latex_table_over_underprediction_days(sarimax_over_underpred_counts)#, model_name=sarimax_over_underpred_counts.index.name)
-importlib.reload(eval)
-eval.plot_all_fc_days(sarimax_best_fc)
+
+# # #Now get for each the fc days
+# sarimax_best_fc = eval.load_model_results_by_id_as_df(model_name="sarimax", result_id=best_models_id_name.query("model == 'sarimax'")["id"].values[0])
+# sarimax_over_underpred_counts = eval.get_overprediction_underprediction_days(sarimax_best_fc, day_ahead=1)
+# eval.make_latex_table_over_underprediction_days(sarimax_over_underpred_counts)#, model_name=sarimax_over_underpred_counts.index.name)
+# eval.plot_all_fc_days(sarimax_best_fc)
+# importlib.reload(eval)
+# eval.plot_all_model_forecasts(best_models_id_name)
 
 
-#LATEX TABLE: Gets data &  creates latex table for day over/underprediction + maximum deviance
-#PLOT: plots all (14) days ahead at one time series
+#LATEX TABLE: Gets data &  creates latex table for day over/underprediction + maximum deviance (one table)
+#PLOT: plots all (14) days ahead at one time series (one plot per model)
+#PLOT: all 4 models fc results on one time series (one plot)
 #%%
-importlib.reload(eval)
+#Make one table for all 4 models: data prep
 over_underpred_counts = []
 for model in best_models_id_name["model"]:
-    best_fc = eval.load_model_resuls_by_id_as_df(model_name=model, result_id=best_models_id_name.query("model == @model")["id"].values[0])
+    best_fc = eval.load_model_results_by_id_as_df(model_name=model, result_id=best_models_id_name.query("model == @model")["id"].values[0])
     over_underpred_counts.append(eval.get_overprediction_underprediction_days(best_fc, day_ahead=1))
+    #Plot all (14) forecast days, one plot per model
     eval.plot_all_fc_days(best_fc)
 over_underpred_counts_df = pd.concat(over_underpred_counts, axis=1)
-
+#Actually create the table
 eval.make_latex_table_over_underprediction_days(over_underpred_counts_df)
+
+#Plot all 4 best models forecast (Day_1) on one time series
+eval.plot_all_model_forecasts(best_models_id_name)
 
 # eval.plot_all_fc_days()
 
@@ -186,30 +193,47 @@ eval.make_latex_table_over_underprediction_days(over_underpred_counts_df)
 sarimax_best_model, sarimax_best_id = best_model_ids.query("model == 'sarimax'").sort_values("RMSE").head(1).pipe(lambda d: (d["model"].values[0], d.index.values[0])) #for just the best
 #Filter for exog_key to (not) contain something
 # sarimax_best_model, sarimax_best_id = best_model_ids.query("model == and ~exog_key.str.contains('use|temp')").sort_values("RMSE").head(1).pipe(lambda d: (d["model"].values[0], d.index.values[0])) #for just the best
-sarimax_best_res_fc = eval.load_model_resuls_by_id_as_df(model_name="Sarimax", result_id=sarimax_best_id) 
+sarimax_best_res_fc = eval.load_model_results_by_id_as_df(model_name="Sarimax", result_id=sarimax_best_id) 
 sarimax_best_res_fc = eval.merge_stats_params_to_id(sarimax_best_res_fc, stats_params, key_labels_map)
 
 sarimax_best_res_fcerr = eval.load_fc_error_by_id_as_df(result_id=sarimax_best_id, model_name=sarimax_best_model)
 
-#%%
+importlib.reload(eval)
+eval.plot_forecast_errors_per_day(df=sarimax_best_res_fcerr)
 
-#%%
-# importlib.reload(eval)
 #Plot 1-day forecast plus upper/lower:
 eval.plot_one_day_ahead_CI(sarimax_best_res_fc)
 eval.plot_one_day_ahead_Diff(sarimax_best_res_fc)
 eval.plot_one_day_ahead_Diff_bars(sarimax_best_res_fc)
 
 
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 #%%
-#
+# As Loop:
+importlib.reload(eval)
+importlib.reload(rconf)
+for model in ["arima", "sarimax", "lstm", "prophet"]:     
+    print("Creating tables and plots for", model)
+    # Get df with 14-Day fc errors as well as df with all forecasts
+    best_model, best_id = best_model_ids.query("model == @model").sort_values("RMSE").head(1).pipe(lambda d: (d["model"].values[0], d.index.values[0])) #for just the best
+    #Filter for exog_key to (not) contain something
+    # best_model, best_id = best_model_ids.query("model == and ~exog_key.str.contains('use|temp')").sort_values("RMSE").head(1).pipe(lambda d: (d["model"].values[0], d.index.values[0])) #for just the best
+    print(best_model, best_id)
+    best_res_fc = eval.load_model_results_by_id_as_df(model_name=model, result_id=best_id) 
+    best_res_fc = eval.merge_stats_params_to_id(best_res_fc, stats_params, key_labels_map)
+
+    #Plot 1-day forecast plus upper/lower:
+    eval.plot_one_day_ahead_CI(best_res_fc)
+    eval.plot_one_day_ahead_Diff(best_res_fc)
+    eval.plot_one_day_ahead_Diff_bars(best_res_fc)
+
+    best_res_fcerr = eval.load_fc_error_by_id_as_df(result_id=best_id, model_name=best_model)
+    eval.plot_forecast_errors_per_day(df=best_res_fcerr)
 
 
-
-
-
-
-
+#%%
 
 
 
@@ -244,7 +268,7 @@ for _, row in best_runs.iterrows():
 best_run_forecasts = []
 for _, row in best_runs.iterrows():
     print(row["model"], row.name)
-    best_run_forecasts.append(eval.load_model_resuls_by_id_as_df(model_name=row["model"], result_id=row.name))
+    best_run_forecasts.append(eval.load_model_results_by_id_as_df(model_name=row["model"], result_id=row.name))
 best_runs_df = pd.concat(best_run_forecasts)
 
 

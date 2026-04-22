@@ -1,4 +1,4 @@
-IMG_PATH = "./plots"
+IMG_PATH = "../thesis_text/images"
 TBL_PATH = "../thesis_text/tables"
 
 CHAPTER = "05"
@@ -12,3 +12,10 @@ PATH_PROPHET = f"{RESULTS_PATH}/Prophet"
 SEP = ","
 INDEX_COL = "id"
 #today = datetime.today().strftime('%Y_%m_%d')
+
+m_cmap = {
+    "arima" : "darkorange",
+    "sarimax" : "firebrick",
+    "lstm" : "dodgerblue",
+    "prophet" : "lightseagreen"
+}
