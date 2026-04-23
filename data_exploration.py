@@ -9,6 +9,13 @@ from matplotlib import pyplot as plt
 import pathlib
 import importlib
 
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.stattools import acovf
+
+from statsmodels.graphics.tsaplots import plot_acf
+from statsmodels.graphics.tsaplots import plot_pacf
+from statsmodels.tsa.seasonal import seasonal_decompose
+
 import seaborn as sns
 
 from src import clean
@@ -20,8 +27,13 @@ from src import transform
 from src import viz
 from src import utils
 from src import config_cleaning
+from src import result_evaluation_config as rconf
+from src import result_evaluation as eval
 
 import pandas as pd
+plt.style.use('seaborn-v0_8-pastel')
+
+
 #%%
 #--------------------------------------------------------------------------------
 # MARK: LOAD DATA
@@ -30,30 +42,395 @@ import pandas as pd
 importlib.reload(clean)
 importlib.reload(config)
 importlib.reload(transform)
-
+START_DATE = "2020-07-03"
+END_DATE = "2025-07-03"
+STD_COL = "use_transfused"
 df_raw = load.load_data(path=config_cleaning.RAW_DATA_PATH)
 df_clean = clean.clean_data(df_raw, new_file_path=config_cleaning.CLEANED_DATA_PATH)
 df_processed = transform.transform_data(df_clean, new_file_path=config_cleaning.TRANSFORMED_DATA_PATH)
 df = data_model.Data(data=df_processed)
+df = df[START_DATE:]
+
+
+def save_plot(fig, name: str, path: str, chapter="05_EXPLRT")->None:
+    print(f"Saved plot to {path}/{chapter}_{name}.png")
+    fig.savefig(f"{path}/{chapter}_{name}.png")
+
+
+#%%
+#----------------------------------------------------------------------------------
+# MARK: Comparison Model
+#----------------------------------------------------------------------------------
+
+
+m_comp = model.ModelComparison(df)
+m_comp.set_parameters(col="use_transfused",
+                      single_value=100,
+                      forecast_window=14,
+                      start_date=START_DATE,
+                      end_date=END_DATE)
+m_comp.dir_name = "Comparison"
+m_comp.file_path = "./results/"+m_comp.dir_name
+m_comp.model_run()
+m_comp.save_results()
+
+m_comp.predictions
+m_comp.forecast_errors
+
+
+# Tests:
+# - Augmented dickey fuller test (stationarity) <- df
+# - autocovariance <- df[use_transfused] -> NICHT MACHEN, too much!
+# - 
+
+# Plots
+# - (P)ACF <- df[use_transfused]
+
+
+#%%
+#%%
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+
+# LATEX TABLE: iterate over COMPARISON rows
+comp_model_latex = (
+    m_comp.forecast_errors
+    .sort_values("RMSE")
+    .rename_axis("Type", axis=0)
+    .loc[:, ["RMSE", "MAE", "ME", "MAPE", "MaxError"]]
+    .assign(MAPE = lambda c: c["MAPE"] * 100 )
+    .rename(columns=lambda c: c.replace("_", r"\_")) #escape underscore!
+    .rename(index=lambda c: c.replace("_", r" ").capitalize()) #escape underscore!
+    .style
+    .format(
+        {"MAPE": "{:.3f}"},
+        precision=2)
+    .to_latex(
+        hrules=True
+        # captions need to be put inplace inside latex, so this can generate only the \begin[tabular]
+        # part and be used within \begin[table]\centering\input
+    )
+)
+# #inject multiline header with "model"
+# comp_model_latex = comp_model_latex.replace(
+#     "\\toprule",  "\\multicolumn{6}{c}{\\textbf{" + model_name.capitalize() + "}} \\\\\\midrule"
+# )
+with open(f"{rconf.TBL_PATH}/05_COMPARISON_tbl_overview.txt", "w") as f:
+    f.write(comp_model_latex)
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+
+# LATEX TABLE: Counts for days with over/underprediction, Max overprediction, max underprediction
+COMP_fc_SV = m_comp.predictions[["Actual", "single_value"]]
+COMP_fc_Naive = m_comp.predictions[["Actual", "naive"]]
+COMP_fc_Mean = m_comp.predictions[["Actual", "mean"]]
+COMP_fc_SNaive = m_comp.predictions[["Actual", "seasonal_naive"]]
+
+COMP_fc_all = [(COMP_fc_SV, "single_value"), (COMP_fc_Naive, "naive"), (COMP_fc_Mean, "mean"), (COMP_fc_SNaive, "seasonal_naive")]
+
+COMP_over_underpred_counts = []
+for i, (model_data, COMP_name) in enumerate(COMP_fc_all):
+    model_data = (model_data
+                  .loc[START_DATE:END_DATE]
+                  .assign(day=1) #dummy, needed for get_overpred...()
+                  .assign(model=COMP_name) #dummy, needed for get_overpred...()
+                  .assign(id="") #dummy, needed for get_overpred...()
+                  .assign(Difference=lambda x: model_data["Actual"] - model_data[COMP_name]) #is wrong way around, but same as actual models!
+                  .rename(columns={COMP_name:"Mean"})
+                  )
+    COMP_over_underpred_counts.append(eval.get_overprediction_underprediction_days(model_data, day_ahead=1))
+    
+COMP_over_underpred_counts_df = (pd.concat(COMP_over_underpred_counts, axis=1)
+                              .rename(columns=lambda c: c.replace("_", r" ").capitalize()) #escape underscore!
+)
+eval.make_latex_table_over_underprediction_days(COMP_over_underpred_counts_df, tbl_name="COMP_table_over_underprediction")
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+
+# PLOT: 4 subplots of time series for each comparison model
+def plot_all_COMP_forecasts(df, start_date: str="2025-01-01", end_date: str=None, 
+                     save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="COMP_all_ts_overview")->None:
+    #Plots time series, with all 4 comparison models forecasts on individual subplots.
+    # Takes df with Actual value and each comparison models forecast in separate column.
+
+    if not end_date:
+        end_date = df.index.max()
+
+    df = df[start_date:end_date]
+
+    #Plotting
+    fig, ax = plt.subplots(2, 2, figsize=(12, 8), constrained_layout=True, sharex=True, sharey=True)
+    ax = ax.flatten()
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    for i, col in enumerate(df.columns[df.columns != "Actual"]):
+        actual_label = "Actual" if i == 0 else None
+        ax[i].plot(df["Actual"], label=actual_label, lw=1.5, color=(0.1, 0.1, 0.1))
+        ax[i].plot(df[col], label=col.replace("_", " ").capitalize(), color=colors[i], lw=1.5) #label=f"Day {day}",  cmap(day/n_days)
+        ax[i].set_ylim(ymin=0)
+        ax[i].set_title(col.replace("_", " ").capitalize())
+        #handles, labels = ax[0].get_legend_handles_labels()
+
+
+    legend = fig.legend(#handles, labels,
+        loc="lower center",
+        frameon=False,
+        ncol=5,
+        bbox_to_anchor=(0.5, -0.05)
+    )
+    #thicker legend lines
+    for line in legend.get_lines():
+        line.set_linewidth(3)
+
+    fig.suptitle(f"Forecasts of all comparison models")
+    fig.supxlabel("Date")
+    fig.supylabel("EC transfused")
+    if save_fig:
+        save_plot(fig, img_name, img_path)
+
+plot_all_COMP_forecasts(m_comp.predictions, start_date="2024-01-01", end_date="2024-03-31")
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+
+
+
+
+#%%----------------------------------------------
+# Cleaned Data
+
+# Time series of selected wards, to show them dis/re-appearing
+def plot_wards_timeseries(df: pd.DataFrame=df_clean)->None:
+    #Only do if i have time
+    pass
+
+
+def plot_whole_series_weekends(df: pd.DataFrame, name: str="whole_series", path: str=rconf.IMG_PATH, chapter="05_EXPLRT")->None:
+    """Plot 3 subplots above each other:
+    One showing use_transfused+discarded+expired for 2005-25
+    One for the data period used 2020-25
+    One for like a year, but highlight the weekends+holidays
+
+
+    Args:
+        df (pd.DataFrame): processed df
+    """
+    fig, ax = plt.subplots(3, 1, figsize=(12,18))
+
+    ax[0].plot(df_processed["use_transfused"], label="transfused", lw=0.1)
+    ax[0].plot(df_processed["use_discarded"], color="orange", label="discarded", lw=0.1)
+    ax[0].plot(df_processed["use_expired"], color="red", label="expired", lw=0.1)
+    ax[0].set_title("Whole collected data")
+
+
+    df["waste"] = df["use_discarded"] + df["use_expired"]
+    ax[1].plot(df.loc["2020-07-05":"2025-07-03", "use_transfused"], label="transfused", lw=0.5)
+    ax[1].plot(df.loc["2020-07-05":"2025-07-03", "use_discarded"], color="orange", label="discarded", lw=0.5)
+    ax[1].plot(df.loc["2020-07-05":"2025-07-03", "use_expired"], color="red", label="expired", lw=0.5)
+    # ax[1].plot(df.loc["2020-07-05":"2025-07-03", "waste"], label="expired+discarded", lw=0.3)
+    ax[1].set_title("Used time period")
+
+    #Slice to one year:
+    df = df["2024-01-01":"2024-05-31"]
+    ax[2].bar(x=df.index, height=df["use_transfused"], label="transfused", width=1)
+    ax[2].bar(x=df.index, height=df["use_discarded"], label="discarded", color="orange", width=1)
+    ax[2].bar(x=df.index, height=df["use_expired"], label="expired", color="red", width=1, bottom=df["use_discarded"])#stack onto discarded
+
+    # ax[2].plot(df.loc["2024-01-01":"2024-12-31", "use_transfused"], label="transfused", lw=0.5)
+    # ax[2].plot(df.loc["2024-01-01":"2024-12-31", "use_discarded"], label="discarded", lw=0.5)
+    # ax[2].plot(df.loc["2024-01-01":"2024-12-31", "use_expired"], label="expired", lw=0.5)
+    # ax[2].plot(df.loc["2024-01-01":"2024-12-31", "waste"], label="expired", lw=0.5)
+    ax[2].set_title("Highlighting weekends and public holidays for 2024")
+    
+    #highlight non-working days:
+    for day in df[~df["is_workday"]].index:
+        ax[2].axvspan(day - pd.Timedelta(hours=12), day + pd.Timedelta(hours=12), alpha=0.1)
+
+
+    fig.suptitle("Daily aggregated time series")
+    fig.supxlabel('date', y=0.06)
+    fig.supylabel('Use (Units EC)', x=0.05)
+    fig.subplots_adjust(bottom=0.1, top=0.95, hspace=0.3)
+
+    #unified legend:
+    handles, labels = [], []
+    for a in ax.flatten():
+        h, l = a.get_legend_handles_labels()
+        for hi, li in zip(h, l):
+            if li not in labels:
+                labels.append(li)
+                handles.append(hi)
+
+    leg = fig.legend(handles, labels, loc='lower center', ncol=len(labels), bbox_to_anchor=(0.5, 0.04), frameon=False)
+    #set legend lines thicker
+    for line in leg.get_lines():
+        line.set_linewidth(2.0)
+    # fig.legend()
+
+    save_plot(fig, name=name, path=path, chapter=chapter)
+
+
+plot_whole_series_weekends(df, name="whole_series", path=rconf.IMG_PATH, chapter="05_EXPLRT")
+
+
+
+#%%
+# ACF, PACF:
+def plot_ACF_PACF(df, col: str=STD_COL, start_date: str=START_DATE, end_date: str=END_DATE, acf: bool=True, name: str="period2020_2025", path: str=rconf.IMG_PATH, chapter="05_EXPLRT")->None:
+    #Plot acf if 'acf' is true, otherwise plot pacf.
+    
+    fig, ax = plt.subplots()
+
+    plot_fct = plot_acf if acf else plot_pacf
+    plot_title = "ACF" if acf else "PACF"
+    name = plot_title + name
+    plot_fct(df.loc["2020-07-05":"2025-07-03", col], ax=ax)
+    
+    ax.set_title(f"{plot_title} for {col}, between ")
+    plt.show()
+    save_plot(fig, name=name, path=path, chapter=chapter)
+
+
+plot_ACF_PACF(df, acf=True)
+plot_ACF_PACF(df, acf=False)
+
+#%%
+def plot_decomposition(df: pd.DataFrame, col: str=STD_COL, start_date: str=START_DATE, end_date: str=END_DATE, 
+                       model: str='additive', period: int=7, name: str="decomposition", path: str=rconf.IMG_PATH, 
+                       chapter="05_EXPLRT")->None:
+    result = seasonal_decompose(df.loc[start_date:end_date, col], model=model, period=period)
+    # res = {
+    #     "Raw": result.observed,
+    #     "Trend": result.trend,
+    #     "Seasonal": result.seasonal,
+    #     "Residuals": result.resid
+    #     }
+
+    # Plotting:
+    # fig, ax = plt.subplots(4, 1, figsize=(12, 12))
+    
+    # result.observed.plot(ax=ax[0], linewidth=0.2)
+    # result.trend.plot(ax=ax[1], linewidth=0.2)
+    # result.seasonal.plot(ax=ax[2], linewidth=0.2)
+    # result.resid.plot(ax=ax[3], linewidth=0.2)
+
+    # ax[0].set_ylabel("Observed")
+    # ax[1].set_ylabel("Trend")
+    # ax[2].set_ylabel("Seasonal")
+    # ax[3].set_ylabel("Residual")
+
+    #fig = result.plot()
+
+
+
+    fig, axes = plt.subplots(4, 1, figsize=(12, 8), sharex=True)
+    axes[0].plot(result.observed, lw=0.5)
+    axes[1].plot(result.trend, lw=0.5)
+    axes[2].plot(result.seasonal, lw=0.5)
+    axes[3].scatter(result.resid.index, result.resid, s=2)#, alpha=0.5)
+
+    for ax, title in zip(axes, ['Observed', 'Trend', 'Seasonal', 'Residual']):
+        ax.set_ylabel(title)
+
+    fig.axes[-1].set_xlabel('date')
+    fig.suptitle(f"Seasonal decomposition ({start_date} to {end_date})")
+    fig.tight_layout()
+
+    save_plot(fig, name=name, path=path, chapter=chapter)
+
+
+plot_decomposition(df, start_date="2024-01-01", end_date="2024-12-31")
+
+
+
+
+#%%
+#
+
+
+
+
+
+
+
+
+
+#%%
+#%%
+
+
+
+importlib.reload(viz)
+viz.seasonal_plot(df_processed["2024-01-01":"2025-01-01"], plot_type="daily", col_name="use_transfused")
+
+
+
+
+# Processed Data
+
+# Augmented dickey fuller test (stationarity)
+
+adf = adfuller(df["use_transfused"])
+
+
+# (-6.3030896239505, -> adf test statistic
+#  3.3745414799057215e-08, -> pvalue
+#  23, -> used lags number
+#  1803, -> number of observations (nobs)
+#  {'1%': -3.4339820768018106, -> critical values
+#   '5%': -2.8631443597478143,
+#   '10%': -2.567624108684946},
+#  15809.457156008557) -> maximized information criterion, if autolag is not None
+
+# test statistic below critical values (1, 5, 10%) -> fail to reject H0 => has unit root (H0=has unit root)
+# pvalue is above critical values -> cannot reject that ther is a unit root
+# 
+
+#https://www.statsmodels.org/dev/generated/statsmodels.tsa.stattools.adfuller.html
+# The null hypothesis of the Augmented Dickey-Fuller is that there is a unit root, 
+# with the alternative that there is no unit root. If the pvalue is above a critical size, 
+# then we cannot reject that there is a unit root.
+# The p-values are obtained through regression surface approximation from MacKinnon 1994, 
+# but using the updated 2010 tables. If the p-value is close to significant, 
+# then the critical values should be used to judge whether to reject the null.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #%%
 #--------------------------------------------------------------------------------
 # MARK: RAW DATA VIZ
 #----------------------------------------------------------------------------------
 
-# Read Data
-
-# #%%
-# load.show_info(df=df_raw)
-# hidden_cols=["date", "EC_ID_I_hash", "EC_ID_O_hash", "T_ISO", "T_DE_T", "T_US", "T_DE_S", "T_US_T", "T_DE", "T_ISO_T", "T_XL"]
-# for col in df_raw.columns:
-#     if col not in hidden_cols:
-#         tmp = df_raw[col].astype(str).unique()
-#         tmp = np.array(sorted(tmp))
-#         print(f"{col}:\n{tmp}\n")
-# print(df_raw.columns)
-# #TODO: move back to clean_data
-# # df_raw = clean.clean_dates(df_raw) #TODO: remove here, enable again in clean_data()
 
 
 
@@ -61,12 +438,7 @@ df = data_model.Data(data=df_processed)
 #--------------------------------------------------------------------------------
 # MARK: CLEANED DATA VIZ
 #----------------------------------------------------------------------------------
-#Runs only if no file exists at. If not existing, saves df to new file
-#unify dates, columns etc. rename stuff
 IMAGES_PATH_EXPLORATION = IMAGE_PATH + "/00-Data-Exploration/"
-
-#TODO: Check what unique vals are present in df
-clean.check_unique_values(df_clean.drop(["EC_ID_I_hash", "EC_ID_O_hash", "PAT_WARD"], axis=1))
 
 
 #
@@ -83,9 +455,11 @@ for col_name, col in df_clean.items():
     plt.show()
 
 
+
+#%%
+# Plot each patient wards transfusion counts (for wards with >500 transfusions)
 importlib.reload(viz)
 ##
-# Plot each patient wards transfusion counts (for wards with >500 transfusions)
 viz.plot_patient_wards(df_clean, n=500, save_figs=False, location=IMAGES_PATH_EXPLORATION, foldername="")
 
 
@@ -98,16 +472,11 @@ viz.plot_patient_wards(df_clean, n=500, save_figs=False, location=IMAGES_PATH_EX
 # MARK: TRANSFORMED DATA VIZ
 # /PROCESSING
 #----------------------------------------------------------------------------------
-# make STATIONARY! (if all models need that, otherwise make it a member function)
-# splitting in test/training etc. here or as extra step/model step?
+
+#
 
 
 
-# Proces....
-#add external data (holidays weather (temp, precipitation), covid/influenca cases)
-#NOTE: covid/grippe muss evnetuell imputiert werden da nur wöchentlich
-#NOTE: kann gut zeigen, dass wien gleichen verlauf hat wie bundesländer, daher kann ich Ö-weite Daten
-# nehmen, falls es keine wien-spezifischen Daten gibt.
 
 
 #%%
@@ -159,12 +528,6 @@ plot_timeseries(df, columns=["use_transfused", "use_expired", "use_discarded"], 
 
 
 #%%
-#TODO: save data to csv
-# # Plot daily/weekly cases influenza
-# fig, ax = plt.subplots(1)
-# ax.plot(df_processed["influenza_daily"])
-# ax.plot(df_processed["influenza_weekly"], color="red")
-# plt.show
 
 
 
