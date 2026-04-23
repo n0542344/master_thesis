@@ -92,7 +92,7 @@ gs_config_sarimax = {
 
 
 # lstm_n_samples = 1 #-1 #set to <0 to get full grid (no sampling) or delete in main.py
-#currently 224 combinations
+#currently 256 combinations
 # lstm_n_samples = 1
 gs_config_lstm = {
     "prediction_column" : [PRED_COLUMN],
@@ -106,12 +106,12 @@ gs_config_lstm = {
     
     "inner_window" : [1000], #[780], #[1200] länger is schneller! [912], #train len: (1825*0.7)-14=1263.5 -> 1263 - 365 = 898 => 365 tage für val in training,
     
-    "memory_cell" : [32, 64, 128, 256],
+    "memory_cell" : [32, 64], #, 128], #, 256],
     "epochs" : [20, 100],
     "batch_size" : [32, 64],
     "pi_iterations" : [100], # n iterations to generate uncertainty
     "optimizer" : ["adam"],
-    "loss" : ["mean_squared_error", "mean_absolute_error"], #, "mean_squared_logarithmic_error"], #see description here:https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/
+    "loss" : ["mean_squared_error"],#, "mean_absolute_error"], #, "mean_squared_logarithmic_error"], #see description here:https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/
 
     "lower_limit" : [2.5],
     "upper_limit" : [97.5]
