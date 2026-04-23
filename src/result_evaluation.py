@@ -953,12 +953,13 @@ def plot_all_fc_days(df, start_date: str="2025-01-01", end_date: str=None,
         end_date = df.index.max()
 
     if len(df["model"].unique()) & len(df["id"].unique()) == 1:
-        model_name = df["model"][0]
+        model_name = str(df["model"][0])
         model_id = df["id"][0]
     else:
         raise ValueError("Either 'model' or 'id' are not unique!")
 
-    n_days = len(df["day"].unique())
+    df = df[start_date:end_date]
+    n_days = len(df["day"].unique()) #amount of forecast days in data
 
     #Plotting
     fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
@@ -968,48 +969,62 @@ def plot_all_fc_days(df, start_date: str="2025-01-01", end_date: str=None,
 
     cmap = plt.get_cmap("winter_r")
     norm = mcolors.Normalize(vmin=1, vmax=n_days)
-    # for day in range(n_days+1, 0, -1): #count down to get Day_1 on top
-    for day in range(1, n_days+1):
-        ax.plot(df.query("day == @day")["Mean"], color=cmap(norm(day)), label=None, lw=1, zorder=n_days-day) #label=f"Day {day}",  cmap(day/n_days)
+
+
+    #only use colormap, if more than one line to plot
+    if n_days > 1:
+        # for day in range(n_days+1, 0, -1): #count down to get Day_1 on top
+        for day in range(1, n_days+1):
+            ax.plot(df.query("day == @day")["Mean"], color=cmap(norm(day)), label=None, lw=1, zorder=n_days-day) #label=f"Day {day}",  cmap(day/n_days)
+
+        #Colorbar for legend
+        sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+        axins = inset_axes(
+            ax,
+            width="5%",  # width: 5% of parent_bbox width
+            height="50%",  # height: 50%
+            loc="lower left",
+            bbox_to_anchor=(0.15, -0.1, 1, 0.025), #l/b/r/h
+            bbox_transform=ax.transAxes,
+            borderpad=0
+        )
+
+        cbar = fig.colorbar(sm, cax=axins,  
+                            orientation="horizontal", location="bottom", 
+                            aspect=13, shrink=0.1, 
+                            pad=0.005, ticks=[1, n_days])
+        cbar.outline.set_visible(False) # remove border
+        cbar.set_ticklabels(["Day 1", "Day {n_days}"])
+        cbar.ax.set_position([0.55, 0.0, 0.3, 0.015]) #left/bottow/right/height
+
+        n_col = 1
+    else:
+        #only really the case for COMPARISON MODEL!
+        for day in range(1, n_days+1):
+            ax.plot(df.query("day == @day")["Mean"], label=model_name, lw=1, zorder=n_days-day) #label=f"Day {day}",  cmap(day/n_days)
+        n_col = 2
 
     ax.set_xlabel("Date")
     ax.set_ylabel("EC transfused")
     ax.set_ylim(ymin=0)
 
-
-    #Colorbar for legend
-    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-    axins = inset_axes(
-        ax,
-        width="5%",  # width: 5% of parent_bbox width
-        height="50%",  # height: 50%
-        loc="lower left",
-        bbox_to_anchor=(0.15, -0.1, 1, 0.025), #l/b/r/h
-        bbox_transform=ax.transAxes,
-        borderpad=0
-    )
-
-    cbar = fig.colorbar(sm, cax=axins,  
-                        orientation="horizontal", location="bottom", 
-                        aspect=13, shrink=0.1, 
-                        pad=0.005, ticks=[1, n_days])
-    cbar.outline.set_visible(False) # remove border
-    cbar.set_ticklabels(["Day 1", "Day 14"])
-    cbar.ax.set_position([0.55, 0.0, 0.3, 0.015]) #left/bottow/right/height
-
     ax.legend(
         loc="lower left",
         frameon=False,
-        ncol=1,
+        ncol=n_col,
         bbox_to_anchor=(0, -0.15)
     )#, ncol=(n_days)//2 + 1)
 
     # fig.subplots_adjust(bottom=0.15)
-    fig.suptitle(f"{n_days}-Day forecast for {model_name.capitalize()} (ID: {model_id})")
+    if model_id != "":
+        fig.suptitle(f"{n_days}-Day forecast for {model_name.capitalize()} (ID: {model_id})")
+    else:
+        print(model_name)
+        print(type(model_name))
+        fig.suptitle(f"{n_days}-Day forecast for {model_name.replace('_', ' ').capitalize()}")
 
     if save_fig:
         save_plot(fig, img_name, model_name, img_path)
-
 
 
 def plot_all_model_forecasts(best_models_id_name: pd.DataFrame, day_ahead: int=1, start_date: str="2025-05-01", end_date: str=None, 
