@@ -33,7 +33,7 @@ import importlib
 #----------------------------------------------------------------------------------
 
 # Entry dates
-def read_daily_entries(data_path="./data/01_raw", filename="Blood-data_complete_including_2025.tsv", top_N_wards=9):
+def read_daily_entries(data_path=rconf.PATH_RAW_DATA, filename="Blood-data_complete_including_2025.tsv", top_N_wards=9):
     """Reads and cleans the file, that provides Entry and Use date for each EC,
      also combines wards to top_N_wards, rest to 'Other' """
 
@@ -99,7 +99,7 @@ def aggregate_daily_entries(df, by="date_entry"):
     return df_wide
 
 # Results
-def parse_all_stats_params(result_dir="./results", save_dict=False):
+def parse_all_stats_params(result_dir=rconf.RESULTS_PATH, save_dict=False):
     """Get a dict, where each model contains a (param+stats)-dict with ID as key
     Iterate over each models result directory, then over each subdirectory.
     Gather params.json and stats.json, to create a dict with keys for each model, 
@@ -147,16 +147,17 @@ def parse_all_stats_params(result_dir="./results", save_dict=False):
     if save_dict:
         try:
             with open(f"{results_dir}/all_params.json", "x") as f:
+                print(f"Save new file to {results_dir}/all_params.json")
                 json.dump(res, fp=f, sort_keys=True, indent=3)    
         except FileExistsError:
-            print("File already exists")
+            print(f"File already exists at {results_dir}/all_params.json")
 
 
     return res
 
 
 
-def parse_all_forecasts(result_dir="./results", save_dict=False, forecast_days=14):
+def parse_all_forecasts(result_dir=rconf.RESULTS_PATH, save_dict=False, forecast_days=14):
     """Get a dict, where each model contains a (param+stats)-dict with ID as key
     Iterate over each models result directory, then over each subdirectory.
     Gather params.json and stats.json, to create a dict with keys for each model, 
@@ -657,7 +658,7 @@ def plot_forecast_errors_per_day(df: pd.DataFrame, save_fig=True, img_path: str=
     df = (df
           .set_index("day")
           .sort_index()
-          .drop(["model", "id", "MSE"], axis=1) #MSE is too high to compare and already in RMSE
+          .drop(["model", "id", "MSE", "MaxError"], axis=1) #MSE is too high to compare and already in RMSE
           .assign(MAPE=lambda c: c["MAPE"]*100)
     )
     # n_days = len(df["day"].unique())
@@ -769,11 +770,11 @@ def plot_error_val_increase(res_dict, error_val: list=["RMSE"], n: int=100,
     # handles, labels = a.get_legend_handles_labels()
     # fig.legend(handles, labels, loc='lower center', ncol=2)
     
-    fig.savefig(fname=f"{IMG_PATH}/{img_name}")
+    fig.savefig(fname=f"{rconf.IMG_PATH}/{img_name}")
 
 
 
-def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True, start_date: str="2025-01-01", end_date: str=None, 
+def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True, start_date: str=rconf.START_DATE, end_date: str=None, 
                        save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="Day_one_fc_with_Diff")->None:
     """plots one X-day-ahead forecast with difference filled between fc and actual
     can set time range and which day ahead (usually one-day-ahead)
@@ -782,7 +783,7 @@ def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True,
         df (pd.DataFrame): Containing all forecasts for all days ahead.
         day_ahead (int, optional): Which day ahead to plot. Defaults to 1.
         diff_color (bool, optional): If True, has two distinct colors for positive or negative. If False, is a single color
-        start_date (str, optional): As string. Defaults to "2025-01-01".
+        start_date (str, optional): As string. Defaults to rconf.START_DATE.
         end_date (str, optional): Automatically detects last day for this day ahead (Note: different last date for each day-ahead). Defaults to None.
         save_fig (bool, optional): _description_. Defaults to True.
         img_path (str, optional): _description_. Defaults to rconf.IMG_PATH.
@@ -828,7 +829,7 @@ def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True,
 
 
 
-def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=True, start_date: str="2025-01-01", end_date: str=None, 
+def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=True, start_date: str=rconf.START_DATE, end_date: str=None, 
                        save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="Day_one_fc_with_Diff_bars")->None:
     """plots one X-day-ahead forecast with difference filled between fc and actual as BARS
     can set time range and which day ahead (usually one-day-ahead)
@@ -837,7 +838,7 @@ def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=
         df (pd.DataFrame): Containing all forecasts for all days ahead.
         day_ahead (int, optional): Which day ahead to plot. Defaults to 1.
         diff_color (bool, optional): If True, has two distinct colors for positive or negative. If False, is a single color
-        start_date (str, optional): As string. Defaults to "2025-01-01".
+        start_date (str, optional): As string. Defaults to rconf.START_DATE.
         end_date (str, optional): Automatically detects last day for this day ahead (Note: different last date for each day-ahead). Defaults to None.
         save_fig (bool, optional): _description_. Defaults to True.
         img_path (str, optional): _description_. Defaults to rconf.IMG_PATH.
@@ -896,7 +897,7 @@ def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=
         save_plot(fig, img_name, model_name, img_path)
 
 
-def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str="2025-01-01", end_date: str=None, 
+def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str=rconf.START_DATE, end_date: str=None, 
                        save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="Day_one_fc_with_CI")->None:
     """plots one X-day-ahead forecast with upper and lower limits
     can set time range and which day ahead (usually one-day-ahead)
@@ -904,7 +905,7 @@ def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str="2025-01-01", en
     Args:
         df (pd.DataFrame): Containing all forecasts for all days ahead.
         day_ahead (int, optional): Which day ahead to plot. Defaults to 1.
-        start_date (str, optional): As string. Defaults to "2025-01-01".
+        start_date (str, optional): As string. Defaults to rconf.START_DATE.
         end_date (str, optional): Automatically detects last day for this day ahead (Note: different last date for each day-ahead). Defaults to None.
         save_fig (bool, optional): _description_. Defaults to True.
         img_path (str, optional): _description_. Defaults to rconf.IMG_PATH.
@@ -945,7 +946,7 @@ def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str="2025-01-01", en
         save_plot(fig, img_name, model_name, img_path)
 
 
-def plot_all_fc_days(df, start_date: str="2025-01-01", end_date: str=None, 
+def plot_all_fc_days(df, start_date: str=rconf.START_DATE, end_date: str=None, 
                      save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="All_days")->None:
     #Plots time series, with all (14) fc days at once (of one model), overlapping each other
     #df needs to contain all forecasts of all days ahead
@@ -958,6 +959,7 @@ def plot_all_fc_days(df, start_date: str="2025-01-01", end_date: str=None,
     else:
         raise ValueError("Either 'model' or 'id' are not unique!")
 
+    df = df.sort_index()
     df = df[start_date:end_date]
     n_days = len(df["day"].unique()) #amount of forecast days in data
 
@@ -1027,7 +1029,7 @@ def plot_all_fc_days(df, start_date: str="2025-01-01", end_date: str=None,
         save_plot(fig, img_name, model_name, img_path)
 
 
-def plot_all_model_forecasts(best_models_id_name: pd.DataFrame, day_ahead: int=1, start_date: str="2025-05-01", end_date: str=None, 
+def plot_all_model_forecasts(best_models_id_name: pd.DataFrame, day_ahead: int=1, start_date: str=rconf.START_DATE, end_date: str=None, 
                      save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="models_best_forecast")->None:
     """Plots time series, with all (4) models best (passed) results on the same time scale, overlapping each other.
     df needs to contain all forecasts of all days ahead for all models.
@@ -1098,7 +1100,7 @@ def plot_fc_time_series(model: pd.DataFrame):
 
 
 #ordered bar chart of count for age at use
-def plot_age_at_usage(df: pd.DataFrame, chapter="05", save_fig=False, save_path="./plots"):
+def plot_age_at_usage(df: pd.DataFrame, chapter="05", save_fig=False, save_path=rconf.IMG_PATH):
     """Ordered bar chart of count for age at use
     Two plots, because transfused has too high scale difference to rest"""
 
@@ -1152,7 +1154,7 @@ def plot_age_at_usage(df: pd.DataFrame, chapter="05", save_fig=False, save_path=
 
 
 
-def plot_exog_combination_results(df: pd.DataFrame, forecast_error: str="RMSE", highlight="None", save_fig=False, save_path="./plots", chapter="05"):
+def plot_exog_combination_results(df: pd.DataFrame, forecast_error: str="RMSE", highlight="None", save_fig=False, save_path=rconf.IMG_PATH, chapter="05"):
     #not sure how to implement: 
     # wanted to make one subplot for each model, showing difference in result
     # with all 7 exog combinations. maybe use top 10 by exog-combo, 
@@ -1215,3 +1217,4 @@ def plot_exog_combination_results(df: pd.DataFrame, forecast_error: str="RMSE", 
         if save_fig:
             today = datetime.today().strftime('%Y_%m_%d')
             fig.savefig(fname=f"{save_path}/{chapter}-{today}-Age_at_usage.png") #05 is results chapter in latex
+
