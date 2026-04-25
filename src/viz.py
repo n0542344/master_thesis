@@ -104,6 +104,7 @@ def seasonal_plot(data, plot_type: str, col_name = "count"): #New: col_name (fro
     color_palette_reversed = color_palette[::-1]
 
     #Plotting:
+    # ax = sns.scatterplot(x=x, y=col_name, data=df, hue=ref_frame_str, palette=color_palette_reversed, linewidth=0.75, alpha=0.3)
     ax = sns.lineplot(x=x, y=col_name, data=df, hue=ref_frame_str, errorbar=('ci', False), palette=color_palette_reversed, linewidth=0.75)
     ax.set_title(f'{title} seasonality plot for {col_name}')
     ax.set_xlabel(xlabel)

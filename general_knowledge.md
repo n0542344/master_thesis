@@ -1,3 +1,38 @@
+# Usefull bash commands
+
+## Server
+**Grep run duration from all stats.json files**
+grep -oP '"run_duration":\s*\K[\d.]+' Arima/*/stats.json
+
+**Outputs all values of exogenous cols:**
+grep -oP '"exog_cols":\s*\K\[[^\]]*\]' Sarimax/*/params.json | less
+
+**All files, that dont have exogenous cols:**
+grep -L '"exog_cols"' Sarimax/*/params.json | less
+
+**Sort grid_search_results.csv by column:**
+sort -t"," -k7 -n grid_search_results.csv
+
+
+
+## Local
+**Git add (stage) all tracked except one file**
+git add -u -- . ':!filename.abc'
+
+
+
+
+
+# Usefull for Latex
+
+**Search for unescaped underscore** in vscode, regex enabled:
+`(?<!\\)_`
+(without the backticks)
+
+
+
+
+
 
 
 # BLOG 1

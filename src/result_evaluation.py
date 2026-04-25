@@ -21,6 +21,7 @@ from src import result_evaluation_config as rconf
 
 from datetime import datetime
 
+import textwrap
 
 import importlib
 
@@ -674,13 +675,15 @@ def plot_forecast_errors_per_day(df: pd.DataFrame, save_fig=True, img_path: str=
 
     ax.legend(
         loc="lower center", 
-        ncol=df.shape[1],
+        ncol=1, #df.shape[1],
         frameon=False,
         bbox_to_anchor=(0.5, -0.15, 0, 0), #l/b/r/h
     )
 
     fig.subplots_adjust(bottom=0.75)
-    fig.suptitle(f"Forecast errors for all Day-ahead forecasts for {model_name.capitalize()} (ID: {model_id})")
+
+    figure_title = f"Forecast errors for all Day-ahead forecasts for {model_name.capitalize()} (ID: {model_id})"
+    fig.suptitle(textwrap.fill(figure_title, width=40))
 
 
     if save_fig:
@@ -710,7 +713,9 @@ def plot_error_val_increase(res_dict, error_val: list=["RMSE"], n: int=100,
         sharey=True, 
         sharex=True)
     
-    fig.suptitle(f"Ranked error values")
+    figure_title = f"Ranked error values"
+    fig.suptitle(textwrap.fill(figure_title, width=40))
+
 
     for i, ax in enumerate(axes.flatten()):
         for key in list(res_dict.keys()):
@@ -803,7 +808,7 @@ def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True,
           )
 
     #Plotting
-    fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(20, 8), constrained_layout=True)
 
     ax.plot(df["Actual"], label="Actual", lw=2, color=(0.1, 0.1, 0.1))
     ax.plot(df["Mean"], label="Forecast", lw=2, color=rconf.m_cmap[model_name])#"violet")
@@ -822,7 +827,9 @@ def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True,
     ax.legend(loc="lower right", ncol=4)
 
     fig.subplots_adjust(bottom=0.75)
-    fig.suptitle(f"Day {day_ahead} forecast with difference between forecasted and actual transfusion counts for {model_name.capitalize()} (ID: {model_id})")
+
+    figure_title = f"Day {day_ahead} forecast with difference between forecasted and actual transfusion counts for {model_name.capitalize()} (ID: {model_id})"
+    fig.suptitle(textwrap.fill(figure_title, width=40))
 
     if save_fig:
         save_plot(fig, img_name, model_name, img_path)
@@ -863,7 +870,7 @@ def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=
     colors = np.where(df["Actual"] > df["Mean"], "violet", "lightblue")
 
     #Plotting
-    fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(20, 8), constrained_layout=True)
     
     # Plot floating bars
     ax.bar(
@@ -871,7 +878,7 @@ def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=
         height,
         bottom=bottom,
         color=colors,
-        width=0.7,          # < 1 creates gaps between bars
+        width=1,          # < 1 creates gaps between bars
         edgecolor="white",  # white edge fakes a small gap
         linewidth=0.5,
         )
@@ -891,7 +898,9 @@ def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=
     ]
     ax.legend(handles=legend_elements, loc="lower right", ncol=4)
     fig.subplots_adjust(bottom=0.75)
-    fig.suptitle(f"Day {day_ahead} forecast with difference between forecasted and actual demand for {model_name.capitalize()} (ID: {model_id})")
+
+    figure_title = f"Day {day_ahead} forecast with difference between forecasted and actual demand for {model_name.capitalize()} (ID: {model_id})"
+    fig.suptitle(textwrap.fill(figure_title, width=40))
 
     if save_fig:
         save_plot(fig, img_name, model_name, img_path)
@@ -925,7 +934,7 @@ def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str=rconf.START_DATE
           )
 
     #Plotting
-    fig, ax = plt.subplots(figsize=(12, 8), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(20, 8), constrained_layout=True)
 
     ax.plot(df["Actual"], label="Actual", lw=2, color=(0.1, 0.1, 0.1))
     ax.plot(df["Mean"], label="Forecast", lw=2,  color=rconf.m_cmap[model_name])#color="mediumvioletred")
@@ -940,7 +949,9 @@ def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str=rconf.START_DATE
     ax.legend(loc="lower right", ncol=4)
 
     fig.subplots_adjust(bottom=0.75)
-    fig.suptitle(f"Day {day_ahead} forecast with confidence intervals for {model_name.capitalize()} (id {model_id})")
+
+    figure_title = f"Day {day_ahead} forecast with confidence intervals for {model_name.capitalize()} (id {model_id})"
+    fig.suptitle(textwrap.fill(figure_title, width=40))
 
     if save_fig:
         save_plot(fig, img_name, model_name, img_path)
@@ -1019,11 +1030,15 @@ def plot_all_fc_days(df, start_date: str=rconf.START_DATE, end_date: str=None,
 
     # fig.subplots_adjust(bottom=0.15)
     if model_id != "":
-        fig.suptitle(f"{n_days}-Day forecast for {model_name.capitalize()} (ID: {model_id})")
+        figure_title = f"{n_days}-Day forecast for {model_name.capitalize()} (ID: {model_id})"
+        fig.suptitle(textwrap.fill(figure_title, width=40))
+
     else:
         print(model_name)
         print(type(model_name))
-        fig.suptitle(f"{n_days}-Day forecast for {model_name.replace('_', ' ').capitalize()}")
+        figure_title = f"{n_days}-Day forecast for {model_name.replace('_', ' ').capitalize()}"
+        fig.suptitle(textwrap.fill(figure_title, width=40))
+
 
     if save_fig:
         save_plot(fig, img_name, model_name, img_path)
@@ -1075,7 +1090,8 @@ def plot_all_model_forecasts(best_models_id_name: pd.DataFrame, day_ahead: int=1
     )
 
     # fig.subplots_adjust(bottom=0.15)
-    fig.suptitle(f"{day_ahead}-Day forecast for all models")
+    figure_title = f"{day_ahead}-Day forecast for all models"
+    fig.suptitle(textwrap.fill(figure_title, width=40))
 
     if save_fig:
         model_name = "All"
@@ -1115,8 +1131,10 @@ def plot_age_at_usage(df: pd.DataFrame, chapter="05", save_fig=False, save_path=
     )
 
     fig, axes = plt.subplots(2,1, sharex=True)
-    fig.suptitle("Age of EC at usage")
-    
+
+    figure_title = "Age of EC at usage"
+    fig.suptitle(textwrap.fill(figure_title, width=40))
+
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     for i, col in enumerate(df.columns):
         color = colors[i % len(colors)]
@@ -1161,7 +1179,9 @@ def plot_exog_combination_results(df: pd.DataFrame, forecast_error: str="RMSE", 
     # and do a ranked line plot? Or just top 1 per exog-combo and bar chart?
 
     fig, axes = plt.subplots(2, 2)
-    fig.suptitle("Influence of exogenous variables")
+
+    figure_title = "Influence of exogenous variables"
+    fig.suptitle(textwrap.fill(figure_title, width=40))
 
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
@@ -1217,4 +1237,192 @@ def plot_exog_combination_results(df: pd.DataFrame, forecast_error: str="RMSE", 
         if save_fig:
             today = datetime.today().strftime('%Y_%m_%d')
             fig.savefig(fname=f"{save_path}/{chapter}-{today}-Age_at_usage.png") #05 is results chapter in latex
+
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+# Plot forecast vs actual and entry_count (daily arrived EC) vs actual
+# one is line plot with the difference filled, the other is a zero-centered bar chart (better IMO).
+
+def plot_actual_fc_mean_diff(df: pd.DataFrame, start_date=rconf.SUBSET_START, end_date=rconf.SUBSET_END,
+                             save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="actual_vs_fc_vs_entry")->None:
+    """Plot Actual value vs Forecast (Mean) vs Entry data in three different subplots."""
+
+    df = df.sort_index().loc[start_date:end_date]
+
+    if len(df["model"].unique()) & len(df["id"].unique()) == 1:
+        model_name = str(df["model"][0])
+        model_id = df["id"][0]
+    else:
+        raise ValueError("Either 'model' or 'id' are not unique!")
+
+
+
+    #fill-between with actual vs forecast, actual vs entry, fc vs actual:
+    fig, ax = plt.subplots(3, 1, figsize=(16, 12), sharex=True, sharey=True)
+    colors = {"Actual": "C0", "Mean": "C1", "entry_count": "C2"}
+
+    import itertools
+    for i, pair in enumerate(list(itertools.combinations(df[["Actual", "Mean", "entry_count"]], 2))):
+
+        ax[i].plot(df[pair[0]], lw=0.75, label=pair[0], color=colors[pair[0]])
+        ax[i].plot(df[pair[1]], lw=0.75, label=pair[1], color=colors[pair[1]])
+        #fill between
+        ax[i].fill_between(
+            x=df.index,
+            y1=df[pair[0]],
+            y2=df[pair[1]],
+            alpha=0.5,
+            interpolate=True
+        )
+        ax[i].set_title(f"{pair[0]} vs. {pair[1]}")
+    #unified legend
+    handles_by_label = {}
+    for a in ax:
+        for h, l in zip(*a.get_legend_handles_labels()):
+            handles_by_label[l] = h  # dict naturally deduplicates
+
+    fig.legend(
+        handles_by_label.values(),
+        handles_by_label.keys(),
+        loc="lower center",
+        ncol=len(handles_by_label),
+        bbox_to_anchor=(0.5, -0.025),
+    )
+    fig.supxlabel("Date")
+
+    # figure_title = model_name
+    # fig.suptitle(textwrap.fill(figure_title, width=40))
+
+    fig.tight_layout()
+
+    if save_fig:
+        save_plot(fig, img_name, model_name, img_path)
+
+
+
+
+
+def plot_actual_fc_mean_diff_bars_centered(df: pd.DataFrame, start_date=rconf.SUBSET_START, end_date=rconf.SUBSET_END,
+                                           save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="actual_vs_fc_vs_entry_bars")->None:
+    #Difference plot between forecast (passed as df), but with bars instead of lines.
+    # no 'day' column present anymore (removed in join_entry_count)
+    df = df.sort_index().loc[rconf.SUBSET_START:rconf.SUBSET_END]
+    # df = df.sort_index().loc[start_date:end_date]
+
+    if len(df["model"].unique()) & len(df["id"].unique()) == 1:
+        model_name = str(df["model"][0])
+        model_id = df["id"][0]
+    else:
+        raise ValueError("Either 'model' or 'id' are not unique!")
+
+    fig_names = {
+        "Actual" : "Actual",
+        "Mean" : f"{model_name.capitalize()}",
+        "entry_count" : "EC Arrivals"
+    }
+
+    # import itertools
+    # for i, pair in enumerate(list(itertools.combinations(sarimax_best_res_fc_entry[["Actual", "Mean", "entry_count"]], 2))):
+
+    pairs = [("Actual", "Mean"), ("Actual", "entry_count")]
+
+    #fill-between with actual vs forecast, actual vs entry, fc vs actual:
+    fig, ax = plt.subplots(len(pairs), 1, figsize=(16, 12), sharex=True, sharey=True)
+    colors = {"Actual": "C0", "Mean": "C1", "entry_count": "C2"}
+
+    for i, pair in enumerate(pairs):
+
+        pair_name = f"{fig_names[pair[0]]} - {fig_names[pair[1]]}"
+
+        df[pair_name] = df[pair[1]] - df[pair[0]]
+        positive = df[pair_name] >= 0
+
+        ax[i].bar(x=df.index[positive], height=df[pair_name][positive], color="green", label="overprediction")
+        ax[i].bar(x=df.index[~positive], height=df[pair_name][~positive], color="red", label="underprediction")
+        ax[i].axhline(0, color="black", lw=1)
+
+        ax[i].set_title(f"{fig_names[pair[0]]} vs. {fig_names[pair[1]]}")
+    #unified legend
+    handles_by_label = {}
+    for a in ax:
+        for h, l in zip(*a.get_legend_handles_labels()):
+            handles_by_label[l] = h  # dict naturally deduplicates
+
+    fig.legend(
+        handles_by_label.values(),
+        handles_by_label.keys(),
+        loc="lower center",
+        ncol=len(handles_by_label),
+        bbox_to_anchor=(0.5, -0.025),
+    )
+    fig.supxlabel("Date")
+    figure_title = model_name
+    fig.suptitle(textwrap.fill(figure_title, width=40))
+    fig.tight_layout()
+
+    if save_fig:
+        save_plot(fig, img_name, model_name, img_path)
+
+
+def join_entry_count(df:pd.DataFrame, entry_df:pd.DataFrame, day: int=1, start_date=rconf.SUBSET_START, end_date=rconf.SUBSET_END)->None:
+    """Removes all columns besides 'Acutal', 'Mean', 'model', 'id'"""
+    df_joined = (df
+                 .query("day == @day")
+                 .filter(items=["Actual", "Mean", "model", "id"])
+                 .join(entry_df[["count"]]
+                 .rename(columns={"count":"entry_count"}),
+                 how="left")
+    )
+    return df_joined
+
+
+def plot_ts_actual_fc_entry(df:pd.DataFrame, day: int=1, start_date=rconf.FC_START_DAY_1, end_date=rconf.FC_END_DAY_1,
+                     save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="actual_vs_fc_vs_entry_TIMESERIES")->None:
+    #df needs to have entry_count joined!
+    # no 'day' column present anymore (removed in join_entry_count)
+    df = df.loc[start_date:end_date]
+
+    if len(df["model"].unique()) & len(df["id"].unique()) == 1:
+        model_name = str(df["model"][0])
+        model_id = df["id"][0]
+    else:
+        raise ValueError("Either 'model' or 'id' are not unique!")
+
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(df["Actual"], label="actual", lw=2)
+    ax.plot(df["Mean"], label="forecast", lw=1)
+    ax.plot(df["entry_count"], label="entry_count", lw=1)
+
+    fig.legend()
+
+    if save_fig:
+        save_plot(fig, img_name, model_name, img_path)
+
+
+def plot_cumsum_actual_fc_entry(df:pd.DataFrame, day: int=1, start_date=rconf.FC_START_DAY_1, end_date=rconf.FC_END_DAY_1,
+                     save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="actual_vs_fc_vs_entry_CUMSUM")->None:
+    #plot cumsum for actual, forecast and entry
+    # df needs to have entry_count joined!
+    # no 'day' column present anymore (removed in join_entry_count)
+
+    if len(df["model"].unique()) & len(df["id"].unique()) == 1:
+        model_name = str(df["model"][0])
+        model_id = df["id"][0]
+    else:
+        raise ValueError("Either 'model' or 'id' are not unique!")
+
+    df["Diff_entry"] = df.apply(lambda x: x.loc["Actual"] - x.loc["entry_count"], axis=1)# difference actual - entry
+    df[["cumsum_actual", "cumsum_fc", "cumsum_entry"]] = df[["Actual", "Mean", "entry_count"]].cumsum()
+
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(df["cumsum_actual"], label="actual")
+    ax.plot(df["cumsum_fc"], label="forecast")
+    ax.plot(df["cumsum_entry"], label="Diff entry")
+    fig.legend()
+
+    if save_fig:
+        save_plot(fig, img_name, model_name, img_path)
 

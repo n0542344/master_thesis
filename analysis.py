@@ -5,8 +5,9 @@ from src import result_evaluation_config as rconf
 from src import model
 import pandas as pd
 
-
-
+from matplotlib import pyplot as plt
+importlib.reload(rconf)
+importlib.reload(eval)
 
 
 
@@ -15,7 +16,7 @@ import pandas as pd
 
 #%% 
 #----------------------------------------------------------------------------------
-# MARK: Function execution
+# MARK: Get Values
 #----------------------------------------------------------------------------------
 
 
@@ -45,17 +46,17 @@ results_overview_dict = eval.merge_stats_params_to_gs_errors(
 key_labels_map = {
     (): "none",
     ("tlmax", "tlmin"): "temp",
-    ("use_discarded", "use_expired"): "use",
-    # ('covid_daily_scaled', 'influenza_daily_scaled'): "respiratory",
-    ("day_of_week", "day_of_year", "holiday_enc", "workday_enc", "year"): "date",
-    # ("tlmax", "tlmin", 'covid_daily_scaled', 'influenza_daily_scaled'): "temp+respiratory",
-    ("tlmax", "tlmin", "use_discarded", "use_expired"): "temp+use",
-    # ("day_of_week", "day_of_year", "holiday_enc", "tlmax", "tlmin", "workday_enc", "year_scaled"): "temp+date",
-    ("day_of_week", "day_of_year", "holiday_enc", "tlmax", "tlmin", "workday_enc", "year"): "temp+date",
-    # ("day_of_week", "day_of_year", "holiday_enc", 'covid_daily_scaled', 'influenza_daily_scaled', "workday_enc", "year_scaled"): "respiratory+date",
-    ("day_of_week", "day_of_year", "holiday_enc", "use_discarded", "use_expired", "workday_enc", "year"): "use+date",
-    # ("day_of_week", "day_of_year", "holiday_enc", "tlmax", "tlmin", 'covid_daily_scaled', 'influenza_daily_scaled', "workday_enc", "year_scaled"): "all",
-    ("day_of_week", "day_of_year", "holiday_enc", "tlmax", "tlmin", "use_discarded", "use_expired", "workday_enc", "year"): "all",
+    # ("use_discarded", "use_expired"): "use",
+    ('covid_daily_scaled', 'influenza_daily_scaled'): "respiratory",
+    ("day_of_week", "day_of_year", "holiday_enc", "workday_enc", "year_scaled"): "date",
+    ('covid_daily_scaled', 'influenza_daily_scaled', "tlmax", "tlmin"): "temp+respiratory",
+    # ("tlmax", "tlmin", "use_discarded", "use_expired"): "temp+use",
+    ("day_of_week", "day_of_year", "holiday_enc", "tlmax", "tlmin", "workday_enc", "year_scaled"): "temp+date",
+    # ("day_of_week", "day_of_year", "holiday_enc", "tlmax", "tlmin", "workday_enc", "year"): "temp+date",
+    ('covid_daily_scaled', "day_of_week", "day_of_year", "holiday_enc", 'influenza_daily_scaled', "workday_enc", "year_scaled"): "respiratory+date",
+    # ("day_of_week", "day_of_year", "holiday_enc", "use_discarded", "use_expired", "workday_enc", "year"): "use+date",
+    ('covid_daily_scaled', "day_of_week", "day_of_year", "holiday_enc", 'influenza_daily_scaled', "tlmax", "tlmin", "workday_enc", "year_scaled"): "all",
+    # ("day_of_week", "day_of_year", "holiday_enc", "tlmax", "tlmin", "use_discarded", "use_expired", "workday_enc", "year"): "all",
 }
 
 #Save key_labels_map as latex table
@@ -68,7 +69,7 @@ key_labels_df = pd.DataFrame(
  .hide(axis="index")
  .to_latex(
      buf=f"{rconf.TBL_PATH}/05_tbl_keys_label_map.txt",
-     column_format="p{2cm}p{10cm}", #for line wrapping
+     column_format="p{4cm}p{10cm}", #for line wrapping
      hrules=True)
 )
 
@@ -86,6 +87,12 @@ all_errors_df = eval.add_exog_key(all_errors_df, key_labels_map)
 #Get one massive df with all forecasts + stats + params for all models
 # Dont do this, is unnessecary
 #all_forecasts_df = eval.parse_all_forecasts(result_dir="./results_FirstRun")
+
+
+#%%
+# Load entry counts for actually arrived EC
+ec_entry_raw = eval.read_daily_entries()
+ec_entry_aggregated = eval.aggregate_daily_entries(ec_entry_raw)
 
 
 
@@ -108,9 +115,12 @@ best_model_ids = (all_errors_df
 
 #%%
 #----------------------------------------------------------------------------------
-# MARK: INDIVIDUAL MODELS: 
+# MARK: PLOTTING/TABLES: 
 # Function execution
 #----------------------------------------------------------------------------------
+
+
+eval.plot_error_val_increase(all_gs_errors, error_val=["RMSE", "MAE"], n=100)
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -169,7 +179,7 @@ best_models_id_name = (best_model_ids
 #LATEX TABLE: Gets data &  creates latex table for day over/underprediction + maximum deviance (one table)
 #PLOT: plots all (14) days ahead at one time series (one plot per model)
 #PLOT: all 4 models fc results on one time series (one plot)
-#%%
+#1y ago#%%
 #Make one table for all 4 models: data prep
 over_underpred_counts = []
 for model in best_models_id_name["model"]:
@@ -188,6 +198,8 @@ eval.plot_all_model_forecasts(best_models_id_name)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 # SARIMAX
+# Comment out??
+
 
 # Get df with 14-Day fc errors as well as df with all forecasts
 sarimax_best_model, sarimax_best_id = best_model_ids.query("model == 'sarimax'").sort_values("RMSE").head(1).pipe(lambda d: (d["model"].values[0], d.index.values[0])) #for just the best
@@ -199,12 +211,12 @@ sarimax_best_res_fc = eval.merge_stats_params_to_id(sarimax_best_res_fc, stats_p
 sarimax_best_res_fcerr = eval.load_fc_error_by_id_as_df(result_id=sarimax_best_id, model_name=sarimax_best_model)
 
 importlib.reload(eval)
-eval.plot_forecast_errors_per_day(df=sarimax_best_res_fcerr)
+eval.plot_forecast_errors_per_day(df=sarimax_best_res_fcerr, save_fig=False)
 
 #Plot 1-day forecast plus upper/lower:
-eval.plot_one_day_ahead_CI(sarimax_best_res_fc)
-eval.plot_one_day_ahead_Diff(sarimax_best_res_fc)
-eval.plot_one_day_ahead_Diff_bars(sarimax_best_res_fc)
+eval.plot_one_day_ahead_CI(sarimax_best_res_fc, save_fig=False)
+eval.plot_one_day_ahead_Diff(sarimax_best_res_fc, save_fig=False)
+eval.plot_one_day_ahead_Diff_bars(sarimax_best_res_fc, save_fig=False)
 
 
 
@@ -212,8 +224,8 @@ eval.plot_one_day_ahead_Diff_bars(sarimax_best_res_fc)
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 #%%
 # As Loop:
-importlib.reload(eval)
 importlib.reload(rconf)
+importlib.reload(eval)
 for model in ["arima", "sarimax", "lstm", "prophet"]:     
     print("Creating tables and plots for", model)
     # Get df with 14-Day fc errors as well as df with all forecasts
@@ -229,126 +241,75 @@ for model in ["arima", "sarimax", "lstm", "prophet"]:
     eval.plot_one_day_ahead_Diff(best_res_fc)
     eval.plot_one_day_ahead_Diff_bars(best_res_fc)
 
+
+    #Plot Actual vs Forecast (Mean) and Actual vs entry_count
+    #join entry_count (removes other columns besides Actual, Mean, model, id (and entry_count))
+    best_res_fc_entry = eval.join_entry_count(df=best_res_fc, entry_df=ec_entry_aggregated, day=1)
+    #with centered bars
+    eval.plot_actual_fc_mean_diff_bars_centered(best_res_fc_entry)
+    # as lineplot with filled difference
+    eval.plot_actual_fc_mean_diff(best_res_fc_entry, start_date=rconf.SUBSET_START, end_date=rconf.SUBSET_END)
+    #Plot time series of actual, forecast ('Mean'), entry_count
+    eval.plot_ts_actual_fc_entry(best_res_fc_entry)
+    #Plot cumulative sum of actual, forecast ('Mean'), entry_count
+    eval.plot_cumsum_actual_fc_entry(best_res_fc_entry)
+
+
+    #Plot forecast error per day
     best_res_fcerr = eval.load_fc_error_by_id_as_df(result_id=best_id, model_name=best_model)
     eval.plot_forecast_errors_per_day(df=best_res_fcerr)
 
 
-#%%
-
-
-
-
-
-
-
-
 
 
 
 
 #%%
-# Get best for sarimax -- overview (=grid_search_results_csv)
-sarimax_overview_top_n = eval.get_best_n_results(results_overview_dict["sarimax"], "RMSE", n=N)
-sarimax_top_id = sarimax_overview_top_n.index[0]
-sarimax_top = sarimax_overview_top_n.loc[sarimax_top_id]
-sarimax_best = eval.load_model_resuls_by_id_as_dict("Sarimax", result_id=sarimax_top_id)
-
-#%%
-#%%
-best_by_exog_col = eval.get_best_by_exog_cols_combination(results_overview_dict)
-
-#Get full forecast results from top models (over all exog combos):
-best_runs = best_by_exog_col.sort_values("RMSE").groupby("model").head(1)
-best_runs_forecasts = {}
-for _, row in best_runs.iterrows():
-    #best_runs has only 4 target rows
-    print(row["model"], row.name)
-    best_runs_forecasts[row["model"]] = eval.load_model_resuls_by_id_as_dict(model_name=row["model"], result_id=row.name)
-
-best_run_forecasts = []
-for _, row in best_runs.iterrows():
-    print(row["model"], row.name)
-    best_run_forecasts.append(eval.load_model_results_by_id_as_df(model_name=row["model"], result_id=row.name))
-best_runs_df = pd.concat(best_run_forecasts)
+# Comment out??
 
 
-best_runs_list = []
-for model, day in best_runs_forecasts.items():
-    for day, df in day.items():
-        df = (df
-              .rename(columns={"Upper_CI":"Upper", "Lower_CI":"Lower"}, errors="ignore")
-              .assign(model=model, day=day)
-        )
-        best_runs_list.append(df)
-best_runs_df = pd.concat(best_runs_list)
-
-best_runs_df = pd.concat(
-    [df.assign(model=key) for key, df in best_runs_forecasts.items()]
-)
-
-
-
+# # Get best for sarimax -- overview (=grid_search_results_csv)
+# sarimax_overview_top_n = eval.get_best_n_results(results_overview_dict["sarimax"], "RMSE", n=N)
+# sarimax_top_id = sarimax_overview_top_n.index[0]
+# sarimax_top = sarimax_overview_top_n.loc[sarimax_top_id]
+# sarimax_best = eval.load_model_resuls_by_id_as_dict("Sarimax", result_id=sarimax_top_id)
 
 
 
 #%%
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-# MARK: ARIMA
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+# Comment out??
+
+# best_by_exog_col = eval.get_best_by_exog_cols_combination(results_overview_dict)
+
+# #Get full forecast results from top models (over all exog combos):
+# best_runs = best_by_exog_col.sort_values("RMSE").groupby("model").head(1)
+# best_runs_forecasts = {}
+# for _, row in best_runs.iterrows():
+#     #best_runs has only 4 target rows
+#     print(row["model"], row.name)
+#     best_runs_forecasts[row["model"]] = eval.load_model_resuls_by_id_as_dict(model_name=row["model"], result_id=row.name)
+
+# best_run_forecasts = []
+# for _, row in best_runs.iterrows():
+#     print(row["model"], row.name)
+#     best_run_forecasts.append(eval.load_model_results_by_id_as_df(model_name=row["model"], result_id=row.name))
+# best_runs_df = pd.concat(best_run_forecasts)
 
 
+# best_runs_list = []
+# for model, day in best_runs_forecasts.items():
+#     for day, df in day.items():
+#         df = (df
+#               .rename(columns={"Upper_CI":"Upper", "Lower_CI":"Lower"}, errors="ignore")
+#               .assign(model=model, day=day)
+#         )
+#         best_runs_list.append(df)
+# best_runs_df = pd.concat(best_runs_list)
 
-# # Get best for Arima -- overview (=grid_search_results_csv)
-# # get
-# arima_overview_top_n = get_best_n_results(results_overview_dict["arima"], "RMSE", n=N)
-# arima_top_id = arima_overview_top_n.index[0]
-# arima_top = arima_overview_top_n.loc[arima_top_id]
-# arima_best = load_model_resuls_by_id("Arima", result_id=arima_top_id)
+# best_runs_df = pd.concat(
+#     [df.assign(model=key) for key, df in best_runs_forecasts.items()]
+# )
 
-
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-# MARK: LSTM
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-
-
-# # Get best for lstm -- overview (=grid_search_results_csv)
-# lstm_overview_top_n = get_best_n_results(results_overview_dict["lstm"], "RMSE", n=N)
-# lstm_top_id = lstm_overview_top_n.index[0]
-# lstm_top = lstm_overview_top_n.loc[lstm_top_id]
-# lstm_best = load_model_resuls_by_id("LSTM", result_id=lstm_top_id)
-
-
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-# MARK: PROPHET
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-
-
-# # Get best for prophet -- overview (=grid_search_results_csv)
-# prophet_overview_top_n= get_best_n_results(results_overview_dict["prophet"], "RMSE", n=N)
-# prophet_top_id = prophet_overview_top_n.index[0]
-# prophet_top = prophet_overview_top_n.loc[prophet_top_id]
-# prophet_best = load_model_resuls_by_id("Prophet", result_id=prophet_top_id)
-
-
-#%%
-# Get best results, for each exogenous combination:
-
-
-#%%
-# Get best of all models
-best_results_overview = pd.DataFrame(data=
-    {
-    "arima" : arima_top,
-    "sarimax" : sarimax_top,
-    "lstm" : lstm_top,
-    "prophet" : prophet_top
-    }
-).transpose()
-
-
-# %%
 
 
 
@@ -359,15 +320,15 @@ best_results_overview = pd.DataFrame(data=
 
 
 
-#%%
-ec_entry_raw = eval.read_daily_entries()
-ec_entry_aggregated = eval.aggregate_daily_entries(ec_entry_raw)
-
 
 
 #%%
+# TS Scatter plot by age at use
 eval.plot_age_at_usage(ec_entry_raw, save_fig=True)
 
-eval.plot_error_val_increase(all_gs_errors, error_val=["RMSE", "MAE"], n=100)
+
+# plot_actual_fc_mean_diff_bars_centered()
+#fig.legend()
 
 
+#%%
