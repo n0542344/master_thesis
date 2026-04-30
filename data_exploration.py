@@ -32,7 +32,6 @@ from src import result_evaluation_config as rconf
 from src import result_evaluation as eval
 
 import pandas as pd
-plt.style.use('seaborn-v0_8-pastel')
 
 
 #%%
@@ -72,6 +71,8 @@ m_comp.set_parameters(col="use_transfused",
                       end_date=END_DATE)
 m_comp.dir_name = "Comparison"
 m_comp.file_path = "./results/"+m_comp.dir_name
+m_comp.start_date = rconf.FC_START_DAY_1
+m_comp.end_date = rconf.FC_END_DAY_1
 m_comp.model_run()
 m_comp.save_results()
 
@@ -146,8 +147,9 @@ for i, (model_data, COMP_name) in enumerate(COMP_fc_all):
 COMP_over_underpred_counts_df = (pd.concat(COMP_over_underpred_counts, axis=1)
                               .rename(columns=lambda c: c.replace("_", r" ").capitalize()) #escape underscore!
 )
+#%%
 eval.make_latex_table_over_underprediction_days(COMP_over_underpred_counts_df, tbl_name="COMP_table_over_underprediction")
-
+#%%
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
@@ -164,37 +166,41 @@ def plot_all_COMP_forecasts(df, start_date: str="2025-01-01", end_date: str=None
     df = df[start_date:end_date]
 
     #Plotting
-    fig, ax = plt.subplots(2, 2, figsize=(12, 8), constrained_layout=True, sharex=True, sharey=True)
+    fig, ax = plt.subplots(2, 2, figsize=(18, 14), constrained_layout=True, sharex=True, sharey=True)
     ax = ax.flatten()
     colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
     for i, col in enumerate(df.columns[df.columns != "Actual"]):
         actual_label = "Actual" if i == 0 else None
-        ax[i].plot(df["Actual"], label=actual_label, lw=1.5, color=(0.1, 0.1, 0.1))
-        ax[i].plot(df[col], label=col.replace("_", " ").capitalize(), color=colors[i], lw=1.5) #label=f"Day {day}",  cmap(day/n_days)
+        ax[i].plot(df["Actual"], label=actual_label, lw=2, color=(0.1, 0.1, 0.1))
+        ax[i].plot(df[col], label=col.replace("_", " ").capitalize(), color=colors[i], lw=2) #label=f"Day {day}",  cmap(day/n_days)
         ax[i].set_ylim(ymin=0)
         ax[i].set_title(col.replace("_", " ").capitalize())
         #handles, labels = ax[0].get_legend_handles_labels()
 
 
     legend = fig.legend(#handles, labels,
-        loc="lower center",
         frameon=False,
-        ncol=5,
+        ncol=3,
+        loc="upper center",
         bbox_to_anchor=(0.5, -0.05)
     )
     #thicker legend lines
     for line in legend.get_lines():
-        line.set_linewidth(3)
+        line.set_linewidth(9)
 
     fig.suptitle(f"Forecasts of all comparison models")
-    fig.supxlabel("Date")
+    # fig.supxlabel("Date")
     fig.supylabel("EC transfused")
+
+    fig.autofmt_xdate()
+    fig.tight_layout()
+
     if save_fig:
         save_plot(fig, img_name, img_path)
 
 plot_all_COMP_forecasts(m_comp.predictions, start_date="2024-01-01", end_date="2024-03-31")
 
-
+#%%
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 
@@ -220,7 +226,7 @@ def plot_whole_series_weekends(df: pd.DataFrame, name: str="whole_series", path:
     Args:
         df (pd.DataFrame): processed df
     """
-    fig, ax = plt.subplots(3, 1, figsize=(12,18))
+    fig, ax = plt.subplots(3, 1, figsize=(14,21))
 
     ax[0].plot(df_processed["use_transfused"], label="transfused", lw=0.1)
     ax[0].plot(df_processed["use_discarded"], color="orange", label="discarded", lw=0.1)
@@ -245,7 +251,7 @@ def plot_whole_series_weekends(df: pd.DataFrame, name: str="whole_series", path:
     # ax[2].plot(df.loc[rconf.PIPE_START:rconf.PIPE_END, "use_discarded"], label="discarded", lw=0.5)
     # ax[2].plot(df.loc[rconf.PIPE_START:rconf.PIPE_END, "use_expired"], label="expired", lw=0.5)
     # ax[2].plot(df.loc[rconf.PIPE_START:rconf.PIPE_END, "waste"], label="expired", lw=0.5)
-    ax[2].set_title("Highlighting weekends and public holidays for 2024")
+    ax[2].set_title("Highlighting weekends \nand public holidays for 2024")
     
     #highlight non-working days:
     for day in df[~df["is_workday"]].index:
@@ -253,7 +259,7 @@ def plot_whole_series_weekends(df: pd.DataFrame, name: str="whole_series", path:
 
 
     fig.suptitle("Daily aggregated time series")
-    fig.supxlabel('date', y=0.06)
+    # fig.supxlabel('date', y=-0.06)
     fig.supylabel('Use (Units EC)', x=0.05)
     fig.subplots_adjust(bottom=0.1, top=0.95, hspace=0.3)
 
@@ -266,11 +272,19 @@ def plot_whole_series_weekends(df: pd.DataFrame, name: str="whole_series", path:
                 labels.append(li)
                 handles.append(hi)
 
-    leg = fig.legend(handles, labels, loc='lower center', ncol=len(labels), bbox_to_anchor=(0.5, 0.04), frameon=False)
+    leg = fig.legend(
+        handles, 
+        labels, 
+        loc='upper center', 
+        ncol=len(labels), 
+        bbox_to_anchor=(0.5, -0.01), 
+        frameon=False)
     #set legend lines thicker
     for line in leg.get_lines():
-        line.set_linewidth(2.0)
+        line.set_linewidth(8.0)
     # fig.legend()
+
+    fig.tight_layout()
 
     save_plot(fig, name=name, path=path, chapter=chapter)
 
@@ -281,17 +295,20 @@ plot_whole_series_weekends(df, name="whole_series", path=rconf.IMG_PATH, chapter
 
 #%%
 # ACF, PACF:
-def plot_ACF_PACF(df, col: str=STD_COL, start_date: str=START_DATE, end_date: str=END_DATE, acf: bool=True, name: str="period2020_2025", path: str=rconf.IMG_PATH, chapter="05_EXPLRT")->None:
+def plot_ACF_PACF(df, col: str=STD_COL, start_date: str=rconf.PIPE_START, end_date: str=rconf.PIPE_END, acf: bool=True, name: str="period2020_2025", path: str=rconf.IMG_PATH, chapter="05_EXPLRT")->None:
     #Plot acf if 'acf' is true, otherwise plot pacf.
     
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(16, 12))
 
     plot_fct = plot_acf if acf else plot_pacf
     plot_title = "ACF" if acf else "PACF"
     name = plot_title + name
-    plot_fct(df.loc[rconf.PIPE_START:rconf.PIPE_END, col], ax=ax)
+    plot_fct(df.loc[start_date:end_date, col], ax=ax)
     
-    ax.set_title(f"{plot_title} for {col}, between ")
+    
+    ax_title = f"{plot_title} for {col} ({start_date} to {end_date})"
+    ax.set_title(textwrap.fill(ax_title, width=30))#rconf.LINEBREAK))
+
     plt.show()
     save_plot(fig, name=name, path=path, chapter=chapter)
 
@@ -328,7 +345,7 @@ def plot_decomposition(df: pd.DataFrame, col: str=STD_COL, start_date: str=START
 
 
 
-    fig, axes = plt.subplots(4, 1, figsize=(12, 8), sharex=True)
+    fig, axes = plt.subplots(4, 1, figsize=(21, 14), sharex=True)
     axes[0].plot(result.observed, lw=0.5)
     axes[1].plot(result.trend, lw=0.5)
     axes[2].plot(result.seasonal, lw=0.5)
@@ -422,12 +439,14 @@ def plot_seasonal(data, plot_type: str, col_name = "use_transfused",
     color_palette_reversed = color_palette[::-1]
 
     #Plotting:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(16,8))
     ax = sns.lineplot(x=x, y=col_name, data=df, hue=ref_frame_str, errorbar=('ci', False), palette=color_palette_reversed, linewidth=0.75)
-    axtitle = f"{title} seasonality plot for {col_name} ({df.index.min().strftime(rconf.DATE_FRMT)} - {df.index.max().strftime(rconf.DATE_FRMT)})"
-    ax.set_title(textwrap.fill(axtitle, width=40))
+    
+    axtitle = f"{title} seasonality for {col_name} \n({df.index.min().strftime(rconf.DATE_FRMT)} to {df.index.max().strftime(rconf.DATE_FRMT)})"
+    ax.set_title(textwrap.fill(axtitle, width=40))#rconf.LINEBREAK))
+    
     ax.set_xlabel(xlabel)
-    ax.set_ylabel('value')
+    ax.set_ylabel('ECs transfused')
     ax.set_xticks(ticks=range(len(xticks_labels)), labels=xticks_labels)
     ax.legend(title=plot_type, loc='upper right', bbox_to_anchor=(1, 1))
 
@@ -456,7 +475,7 @@ plot_seasonal(df_processed[rconf.SUBSET_START:rconf.SUBSET_END], plot_type="dail
 
 
 
-
+#%%
 
 
 # Processed Data

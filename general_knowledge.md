@@ -20,7 +20,12 @@ sort -t"," -k7 -n grid_search_results.csv
 git add -u -- . ':!filename.abc'
 
 
-
+**Quickly combine \*/forecast_errors.csv to grid_search_results.csv**
+echo "id,ME,MAE,MedAE,MAPE,MSE,RMSE,MaxError" > grid_search_results.csv
+for f in */forecast_errors.csv; do
+    id=$(echo $f | cut -d'_' -f1)
+    awk -F';' 'NR==2{print "'$id',"$2","$3","$4","$5","$6","$7","$8}' "$f"
+done >> grid_search_results.csv
 
 
 # Usefull for Latex

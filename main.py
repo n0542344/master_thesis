@@ -244,7 +244,7 @@ def main():
     sampled_jobs["sarimax"] = sample_grid(sampled_jobs["sarimax"], n_samples=config.sarimax_n_samples) #keep? 
     # sampled_jobs["lstm"] = sample_grid(sampled_jobs["lstm"], n_samples=config.lstm_n_samples)
     # sampled_jobs["prophet"] = sample_grid(sampled_jobs["prophet"], n_samples=config.prophet_n_samples)
-    
+
     #total_jobs_num = sum(len(v) for v in sampled_jobs.values())
     #logger.info(f"--- Total number of Jobs: {len(total_jobs_num)} ---")
     logger.info(f"--- Arima:   {len(sampled_jobs['arima'])} ---")

@@ -36,8 +36,8 @@ SUBSET_END = "2024-12-31"
 
 #FORMATTING
 DATE_FRMT = '%Y-%m-%d'
-
-
+LINEBREAK = 60 #where title breaks 
+LEGENDLW = 8 #legend linewdith
 #Graphical settings:
 plt.style.use('seaborn-v0_8-deep')
 
@@ -62,10 +62,23 @@ plt.rcParams.update({
     'axes.spines.right': False,
 })
 
-m_cmap = {
-    "arima" : "darkorange",
-    "sarimax" : "firebrick",
-    "lstm" : "dodgerblue",
-    "prophet" : "lightseagreen"
+#model map
+mmap = {
+    "arima" : {
+        "col" : "darkorange",
+        "name" : "ARIMA"
+    },
+    "sarimax" : {
+        "col" : "firebrick",
+        "name" : "SARIMAX"
+    },
+    "lstm" : {
+        "col" : "dodgerblue",
+        "name" : "LSTM"
+    },
+    "prophet" : {
+        "col" : "seagreen",
+        "name" : "Prophet"
+    }
 }
 

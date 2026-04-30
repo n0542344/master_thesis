@@ -129,6 +129,8 @@ def seasonal_plot(data, plot_type: str, col_name = "count"): #New: col_name (fro
     plt.tight_layout()
     plt.show()
 
+    
+
 
 
 def heatmap(data):
