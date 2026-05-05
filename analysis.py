@@ -107,8 +107,9 @@ best_model_ids = (all_errors_df
                   .dropna(subset=["MAE", "RMSE", "run_duration"], axis=0)
                   #.query("exog_key == 'temp+date'")
                   #.sort_values(["RMSE", "model"])
+                  .sort_values(["RMSE"])
                   .groupby(["model", "exog_key"])
-                  .tail(1)
+                  .head(1)
 )
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -469,8 +470,8 @@ eval.plot_age_at_usage(ec_entry_raw, save_fig=True)
 #%%
 
 
-# for model in all_errors_df["model"].unique():
-ax.plot(all_errors_df.query("model == 'sarimax'")["RMSE"], color=all_errors_df["exog_key"])
+# # for model in all_errors_df["model"].unique():
+# ax.plot(all_errors_df.query("model == 'sarimax'")["RMSE"], color=all_errors_df["exog_key"])
 
 
 

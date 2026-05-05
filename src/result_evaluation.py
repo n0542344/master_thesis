@@ -641,12 +641,6 @@ def forecast_blood_groups(model, params):
 
 
 
-#MISSING!plot day_1 forecast for each model, for each exogenous combination?
-def plot_results_by_exogenous():
-    """MISSING! plot day_1 forecast for each model, for each exogenous combination"""    
-    #Get top for each exogenous combo
-
-    pass
 
 
 def plot_forecast_errors_per_day(df: pd.DataFrame, save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="forecast_error_per_day_ahead")->None:
@@ -802,7 +796,7 @@ def plot_error_val_increase(res_dict, error_val: list=["RMSE"], n: int=100,
 
 
 
-def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True, start_date: str=rconf.START_DATE, end_date: str=None, 
+def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True, fc_col: str="Mean", start_date: str=rconf.START_DATE, end_date: str=None, 
                        save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="Day_one_fc_with_Diff")->None:
     """plots one X-day-ahead forecast with difference filled between fc and actual
     can set time range and which day ahead (usually one-day-ahead)
@@ -860,7 +854,7 @@ def plot_one_day_ahead_Diff(df: pd.DataFrame, day_ahead: int=1, diff_color=True,
 
 
 def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=True, start_date: str=rconf.START_DATE, end_date: str=None, 
-                       save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="Day_one_fc_with_Diff_bars")->None:
+                       ax=None, save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="Day_one_fc_with_Diff_bars")->None:
     """plots one X-day-ahead forecast with difference filled between fc and actual as BARS
     can set time range and which day ahead (usually one-day-ahead)
 
@@ -893,8 +887,12 @@ def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=
     colors = np.where(df["Actual"] > df["Mean"], "violet", "lightblue")
 
     #Plotting
-    fig, ax = plt.subplots(figsize=(20, 8), constrained_layout=True)
-    
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(20, 8), constrained_layout=True)
+    else:
+        fig = ax.get_figure()
+        return_fig = False
+        
     # Plot floating bars
     ax.bar(
         df.index,
@@ -931,10 +929,13 @@ def plot_one_day_ahead_Diff_bars(df: pd.DataFrame, day_ahead: int=1, diff_color=
 
     if save_fig:
         save_plot(fig, img_name, model_name, img_path)
+    
+    if return_fig:
+        return fig, ax
 
 
 def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str=rconf.START_DATE, end_date: str=None, 
-                       save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="Day_one_fc_with_CI")->None:
+                       ax=None, save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="Day_one_fc_with_CI")->None:
     """plots one X-day-ahead forecast with upper and lower limits
     can set time range and which day ahead (usually one-day-ahead)
 
@@ -961,7 +962,11 @@ def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str=rconf.START_DATE
           )
 
     #Plotting
-    fig, ax = plt.subplots(figsize=(20, 8), constrained_layout=True)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(20, 8), constrained_layout=True)
+    else:
+        fig = ax.get_figure()
+        return_fig = False
 
     ax.plot(df["Actual"], label="Actual", lw=2, color=(0.1, 0.1, 0.1))
     ax.plot(df["Mean"], label="Forecast", lw=2,  color=rconf.mmap[model_name]["col"])#color="mediumvioletred")
@@ -985,6 +990,9 @@ def plot_one_day_ahead_CI(df, day_ahead: int=1, start_date: str=rconf.START_DATE
 
     if save_fig:
         save_plot(fig, img_name, model_name, img_path)
+
+    if return_fig:
+        return fig, ax
 
 
 def plot_all_fc_days(df, start_date: str=rconf.START_DATE, end_date: str=None, 
@@ -1140,14 +1148,6 @@ def plot_all_model_forecasts(best_models_id_name: pd.DataFrame, day_ahead: int=1
 def save_plot(fig, name: str, model: str, path: str, chapter="05")->None:
     print(f"Saved plot to {path}/{chapter}_{model.capitalize()}_{name}.png")
     fig.savefig(f"{path}/{chapter}_{model.capitalize()}_{name}.png", bbox_inches="tight")
-
-
-
-# Plot time series with Actual, FC, upper/lower CI for all models:
-def plot_fc_time_series(model: pd.DataFrame):
-    """Plot time series with Actual, FC, upper/lower CI for all models:"""
-    pass
-
 
 
 
@@ -1311,7 +1311,7 @@ def plot_exog_combination_results(df: pd.DataFrame, forecast_error: str="RMSE", 
 # Plot forecast vs actual and entry_count (daily arrived EC) vs actual
 # one is line plot with the difference filled, the other is a zero-centered bar chart (better IMO).
 
-def plot_actual_fc_mean_diff(df: pd.DataFrame, start_date=rconf.SUBSET_START, end_date=rconf.SUBSET_END,
+def plot_actual_fc_mean_diff(df: pd.DataFrame, fc_col: str="Mean", start_date=rconf.SUBSET_START, end_date=rconf.SUBSET_END,
                              save_fig=True, img_path: str=rconf.IMG_PATH, img_name: str="actual_vs_fc_vs_entry")->None:
     """Plot Actual value vs Forecast (Mean) vs Entry data in three different subplots."""
 

@@ -79,6 +79,10 @@ mmap = {
     "prophet" : {
         "col" : "seagreen",
         "name" : "Prophet"
+    },
+    "single_value" : {
+        "col" : "pink",
+        "name" : "Single Value"
     }
 }
 

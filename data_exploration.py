@@ -65,7 +65,7 @@ def save_plot(fig, name: str, path: str, chapter="05_EXPLRT")->None:
 
 m_comp = model.ModelComparison(df)
 m_comp.set_parameters(col="use_transfused",
-                      single_value=100,
+                      single_value=107,
                       forecast_window=14,
                       start_date=START_DATE,
                       end_date=END_DATE)
@@ -125,10 +125,10 @@ with open(f"{rconf.TBL_PATH}/05_COMPARISON_tbl_overview.txt", "w") as f:
 
 
 # LATEX TABLE: Counts for days with over/underprediction, Max overprediction, max underprediction
-COMP_fc_SV = m_comp.predictions[["Actual", "single_value"]]
-COMP_fc_Naive = m_comp.predictions[["Actual", "naive"]]
-COMP_fc_Mean = m_comp.predictions[["Actual", "mean"]]
-COMP_fc_SNaive = m_comp.predictions[["Actual", "seasonal_naive"]]
+COMP_fc_SV = m_comp.predictions.loc[rconf.FC_START_DAY_1:rconf.FC_END_DAY_1: ,["Actual", "single_value"]]
+COMP_fc_Naive = m_comp.predictions.loc[rconf.FC_START_DAY_1:rconf.FC_END_DAY_1: ,["Actual", "naive"]]
+COMP_fc_Mean = m_comp.predictions.loc[rconf.FC_START_DAY_1:rconf.FC_END_DAY_1: ,["Actual", "mean"]]
+COMP_fc_SNaive = m_comp.predictions.loc[rconf.FC_START_DAY_1:rconf.FC_END_DAY_1: ,["Actual", "seasonal_naive"]]
 
 COMP_fc_all = [(COMP_fc_SV, "single_value"), (COMP_fc_Naive, "naive"), (COMP_fc_Mean, "mean"), (COMP_fc_SNaive, "seasonal_naive")]
 
@@ -318,7 +318,7 @@ plot_ACF_PACF(df, acf=False)
 
 #%%
 def plot_decomposition(df: pd.DataFrame, col: str=STD_COL, start_date: str=START_DATE, end_date: str=END_DATE, 
-                       model: str='additive', period: int=7, name: str="decomposition", path: str=rconf.IMG_PATH, 
+                       fig=None, axes=None, model: str='additive', period: int=7, name: str="decomposition", path: str=rconf.IMG_PATH, 
                        chapter="05_EXPLRT")->None:
     result = seasonal_decompose(df.loc[start_date:end_date, col], model=model, period=period)
     # res = {
@@ -344,12 +344,16 @@ def plot_decomposition(df: pd.DataFrame, col: str=STD_COL, start_date: str=START
     #fig = result.plot()
 
 
+    if axes is None:
+        fig, axes = plt.subplots(4, 1, figsize=(21, 14), sharex=True)
+    else:
+        fig = axes.get_figure()
+        return_fig = False
 
-    fig, axes = plt.subplots(4, 1, figsize=(21, 14), sharex=True)
-    axes[0].plot(result.observed, lw=0.5)
-    axes[1].plot(result.trend, lw=0.5)
-    axes[2].plot(result.seasonal, lw=0.5)
-    axes[3].scatter(result.resid.index, result.resid, s=2)#, alpha=0.5)
+    axes[0].plot(result.observed, lw=1.5)
+    axes[1].plot(result.trend, lw=1.5)
+    axes[2].plot(result.seasonal, lw=1.5)
+    axes[3].scatter(result.resid.index, result.resid, s=10)#, alpha=0.5)
 
     for ax, title in zip(axes, ['Observed', 'Trend', 'Seasonal', 'Residual']):
         ax.set_ylabel(title)
@@ -359,6 +363,9 @@ def plot_decomposition(df: pd.DataFrame, col: str=STD_COL, start_date: str=START
     fig.tight_layout()
 
     save_plot(fig, name=name, path=path, chapter=chapter)
+
+    if return_fig:
+        return fig, axes
 
 
 plot_decomposition(df, start_date=rconf.SUBSET_START, end_date=rconf.SUBSET_END)
